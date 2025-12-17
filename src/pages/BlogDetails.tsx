@@ -23,6 +23,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBlog } from '@/hooks/useBlogs';
+import { supabase } from '@/integrations/supabase/client';
 import { LinkRenderer } from '@/lib/linkDetector';
 import { BlogContentRenderer } from '@/components/BlogContentRenderer';
 import { UserProfileCard } from '@/components/UserProfileCard';
@@ -105,7 +106,7 @@ export default function BlogDetails() {
       // Send notification to blog author (only after successful comment addition)
       if (blog && blog.author_id !== user.id) {
         try {
-          notificationService.addBlogCommentNotification(
+          await notificationService.addBlogCommentNotification(
             blog.author_id,
             id!,
             blog.title,
@@ -171,11 +172,25 @@ export default function BlogDetails() {
 
     try {
       const wasLiked = isLiked;
-      setIsLiked(!wasLiked); // Optimistic update
+      // Optimistic UI updates
+      setIsLiked(!wasLiked);
+      
       await toggleLike();
+      
+      // The toggleLike function calls fetchBlog() which should update the blog state
+      // But let's also check the like status again to be sure
+      const { data: likeCheck } = await supabase
+        .from('blog_likes')
+        .select('id')
+        .eq('blog_id', id)
+        .eq('user_id', user.id)
+        .single();
+      
+      setIsLiked(!!likeCheck);
       toast.success(wasLiked ? 'Like removed!' : 'Blog liked!');
     } catch (error: any) {
-      setIsLiked(wasLiked); // Revert to original state on error
+      // Revert optimistic update on error
+      setIsLiked(isLiked);
       toast.error(error.message || 'Failed to like blog');
     }
   };

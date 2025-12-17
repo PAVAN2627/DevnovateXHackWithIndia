@@ -145,7 +145,7 @@ export default function IssueDetails() {
       // Send notification to issue author (only after successful comment addition)
       if (issue && issue.author_id !== user?.id) {
         try {
-          notificationService.addIssueCommentNotification(
+          await notificationService.addIssueCommentNotification(
             issue.author_id,
             id || '',
             issue.title,

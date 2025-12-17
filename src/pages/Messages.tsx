@@ -526,18 +526,23 @@ export default function Messages() {
         await refreshMessages();
 
         // Send notification for text message
-        const { data: senderProfile } = await supabase
-          .from('profiles')
-          .select('name')
-          .eq('user_id', user.id)
-          .single();
-        
-        notificationService.addMessageNotification(
-          selectedUser.id,
-          user.id,
-          senderProfile?.name || user.email || 'Anonymous',
-          messageText
-        );
+        try {
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('user_id', user.id)
+            .single();
+          
+          await notificationService.addMessageNotification(
+            selectedUser.id,
+            user.id,
+            senderProfile?.name || user.email || 'Anonymous',
+            messageText
+          );
+        } catch (notificationError) {
+          console.error('Failed to send notification:', notificationError);
+          // Don't fail the message sending if notification fails
+        }
       }
 
       // Send file messages using Supabase Storage
@@ -595,18 +600,23 @@ export default function Messages() {
           await refreshMessages();
 
           // Send notification for file
-          const { data: senderProfile } = await supabase
-            .from('profiles')
-            .select('name')
-            .eq('user_id', user.id)
-            .single();
-          
-          notificationService.addMessageNotification(
-            selectedUser.id,
-            user.id,
-            senderProfile?.name || user.email || 'Anonymous',
-            `Sent a file: ${file.name}`
-          );
+          try {
+            const { data: senderProfile } = await supabase
+              .from('profiles')
+              .select('name')
+              .eq('user_id', user.id)
+              .single();
+            
+            await notificationService.addMessageNotification(
+              selectedUser.id,
+              user.id,
+              senderProfile?.name || user.email || 'Anonymous',
+              `Sent a file: ${file.name}`
+            );
+          } catch (notificationError) {
+            console.error('Failed to send file notification:', notificationError);
+            // Don't fail the file sending if notification fails
+          }
           
           toast.success(`File ${file.name} sent successfully!`);
         } catch (fileError) {
