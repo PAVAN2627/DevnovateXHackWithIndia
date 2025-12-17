@@ -44,8 +44,10 @@ export const notificationService = {
       id: `notif_${Date.now()}_${Math.random()}`,
       created_at: new Date().toISOString(),
     };
+    console.log('Storing notification:', newNotification);
     data.notifications.unshift(newNotification);
     notificationService.saveData(data);
+    console.log('All notifications after save:', data.notifications);
     return newNotification;
   },
 
