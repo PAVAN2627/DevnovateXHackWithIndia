@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Megaphone, Pin, User, Calendar } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { storage } from '@/lib/storage';
+import { supabase } from '@/integrations/supabase/client';
 import { LinkRenderer } from '@/lib/linkDetector';
 import { AvatarUpload } from '@/components/AvatarUpload';
 import { RelativeTime, RelativeTimeTooltip } from '@/components/RelativeTime';
@@ -17,6 +17,7 @@ interface Announcement {
   is_pinned: boolean;
   created_at: string;
   author_name?: string;
+  author_avatar?: string | null;
   hackathon_title?: string;
 }
 
@@ -34,26 +35,44 @@ export default function Announcements() {
     }
   }, [authLoading, markAllAsRead]);
 
-  const loadAnnouncements = () => {
+  const loadAnnouncements = async () => {
     try {
-      // Get all hackathons to fetch their announcements
-      const hackathons = storage.getAllHackathons();
-      const allAnnouncements: Announcement[] = [];
+      // Fetch all announcements from Supabase
+      const { data: announcementsData, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      hackathons.forEach((hackathon: any) => {
-        const hackathonAnnouncements = storage.getAnnouncementsByHackathon(hackathon.id);
-        hackathonAnnouncements.forEach((announcement: any) => {
-          const profile = storage.getProfile(announcement.author_id);
-          allAnnouncements.push({
+      if (error) throw error;
+
+      // Fetch additional details for each announcement
+      const announcementsWithDetails = await Promise.all(
+        (announcementsData || []).map(async (announcement) => {
+          // Get author profile
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('name, avatar_url')
+            .eq('user_id', announcement.author_id)
+            .single();
+
+          // Get hackathon title
+          const { data: hackathon } = await supabase
+            .from('hackathons')
+            .select('title')
+            .eq('id', announcement.hackathon_id)
+            .single();
+
+          return {
             ...announcement,
             author_name: profile?.name || 'Unknown',
-            hackathon_title: hackathon.title,
-          });
-        });
-      });
+            author_avatar: profile?.avatar_url || null,
+            hackathon_title: hackathon?.title || 'Unknown Hackathon',
+          };
+        })
+      );
 
       // Sort announcements: pinned first, then by date (newest first)
-      const sortedAnnouncements = allAnnouncements.sort((a, b) => {
+      const sortedAnnouncements = announcementsWithDetails.sort((a, b) => {
         if (a.is_pinned !== b.is_pinned) {
           return b.is_pinned ? 1 : -1;
         }
@@ -136,7 +155,7 @@ export default function Announcements() {
               {/* Header */}
               <div className="flex items-start gap-3 mb-4">
                 <AvatarUpload 
-                  currentAvatar={storage.getProfile(announcement.author_id)?.avatar_url || null}
+                  currentAvatar={announcement.author_avatar || null}
                   userName={announcement.author_name}
                   size="md"
                   editable={false}

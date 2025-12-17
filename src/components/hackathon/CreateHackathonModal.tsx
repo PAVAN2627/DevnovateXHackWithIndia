@@ -35,6 +35,7 @@ export function CreateHackathonModal({ open, onOpenChange, onSubmit, isSubmittin
     description: '',
     start_date: new Date().toISOString(),
     end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    registration_deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
     location: '',
     mode: 'online',
     prizes: '',
@@ -48,6 +49,7 @@ export function CreateHackathonModal({ open, onOpenChange, onSubmit, isSubmittin
         description: initialData.description,
         start_date: initialData.start_date,
         end_date: initialData.end_date,
+        registration_deadline: initialData.registration_deadline || new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
         location: initialData.location,
         mode: initialData.mode,
         prizes: Array.isArray(initialData.prizes) ? initialData.prizes.join(', ') : '',
@@ -180,6 +182,14 @@ export function CreateHackathonModal({ open, onOpenChange, onSubmit, isSubmittin
               label="End Date & Time"
               value={formData.end_date}
               onChange={(value) => setFormData({ ...formData, end_date: value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <DateTimePicker
+              label="Registration Deadline"
+              value={formData.registration_deadline}
+              onChange={(value) => setFormData({ ...formData, registration_deadline: value })}
             />
           </div>
 

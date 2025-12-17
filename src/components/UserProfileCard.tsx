@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, MessageCircle, Linkedin, Github, Twitter, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
-import { storage } from '@/lib/storage';
+import { supabase } from '@/integrations/supabase/client';
 
 interface UserProfileCardProps {
   userId: string;
@@ -12,11 +12,33 @@ interface UserProfileCardProps {
 }
 
 export function UserProfileCard({ userId, userName, onClose, onSendMessage }: UserProfileCardProps) {
-  const profile = storage.getProfile(userId);
-  const user = storage.getUser(userId);
-  const role = storage.getUserRole(userId);
+  const [profile, setProfile] = useState<any>(null);
+  const [role, setRole] = useState<string>('participant');
+  const [loading, setLoading] = useState(true);
 
-  if (!profile || !user) {
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .single();
+
+      setProfile(profileData);
+      setRole(roleData?.role || 'participant');
+      setLoading(false);
+    };
+
+    fetchProfile();
+  }, [userId]);
+
+  if (loading || !profile) {
     return null;
   }
 
@@ -38,7 +60,7 @@ export function UserProfileCard({ userId, userName, onClose, onSendMessage }: Us
         <div className="space-y-3 mb-4">
           <div>
             <p className="text-sm text-muted-foreground">Email</p>
-            <p className="text-sm break-all">{user.email}</p>
+            <p className="text-sm break-all">{profile.email}</p>
           </div>
 
           {profile.college && (

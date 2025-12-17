@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { User, MessageCircle, X, Linkedin, Github, Twitter, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { storage } from '@/lib/storage';
+import { supabase } from '@/integrations/supabase/client';
 import { AvatarUpload } from '@/components/AvatarUpload';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -31,44 +31,64 @@ export function UserProfileModal({
     }
   }, [userId, isOpen]);
 
-  const loadProfile = () => {
+  const loadProfile = async () => {
     setLoading(true);
     try {
-      const userProfile = storage.getProfile(userId || '');
-      const userData = storage.getUser(userId || '');
-      
-      if (userProfile && userData) {
-        // Get user role
-        const userRole = storage.getUserRole(userId || '');
-        
-        // Calculate actual stats
-        const allBlogs = storage.getAllBlogs();
-        const userBlogs = allBlogs.filter((blog: any) => blog.author_id === userId);
-        
-        const allIssues = storage.getAllIssues();
-        const userIssues = allIssues.filter((issue: any) => issue.author_id === userId);
-        
-        // Get all comments by this user
-        const allBlogComments = storage.getAllBlogComments?.() || [];
-        const allIssueComments = storage.getAllIssueComments?.() || [];
-        const userComments = [
-          ...allBlogComments.filter((comment: any) => comment.author_id === userId),
-          ...allIssueComments.filter((comment: any) => comment.author_id === userId)
-        ];
-        
-        const enhancedProfile = {
-          ...userProfile,
-          email: userData.email,
-          role: userRole || 'participant',
-          posts: userBlogs.length,
-          issues: userIssues.length,
-          contributions: userComments.length
-        };
-        
-        setProfile(enhancedProfile);
+      // Get user profile from Supabase
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (profileError) {
+        console.error('Error loading profile:', profileError);
+        setProfile({
+          name: userName,
+          email: 'No email available',
+          posts: 0,
+          issues: 0,
+          contributions: 0
+        });
+        return;
       }
+
+      // Count user's blogs
+      const { count: blogCount } = await (supabase as any)
+        .from('blogs')
+        .select('*', { count: 'exact', head: true })
+        .eq('author_id', userId);
+
+      // Count user's issues  
+      const { count: issueCount } = await (supabase as any)
+        .from('issues')
+        .select('*', { count: 'exact', head: true })
+        .eq('author_id', userId);
+
+      // Count user's issue comments only (contributions)
+      const { count: issueCommentCount } = await (supabase as any)
+        .from('issue_comments')
+        .select('*', { count: 'exact', head: true })
+        .eq('author_id', userId);
+
+      const enhancedProfile = {
+        ...profile,
+        email: profile?.email || 'No email available',
+        posts: blogCount || 0,
+        issues: issueCount || 0,
+        contributions: issueCommentCount || 0
+      };
+
+      setProfile(enhancedProfile);
     } catch (error) {
       console.error('Error loading profile:', error);
+      setProfile({
+        name: userName,
+        email: 'No email available',
+        posts: 0,
+        issues: 0,
+        contributions: 0
+      });
     } finally {
       setLoading(false);
     }
@@ -87,16 +107,7 @@ export function UserProfileModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <div className="relative">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="absolute right-0 top-0 h-8 w-8 p-0"
-            onClick={onClose}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-
-          <div className="pt-6">
+          <div className="pt-2">
             {loading ? (
               <div className="text-center py-8">
                 <div className="animate-pulse text-muted-foreground">Loading...</div>
@@ -106,8 +117,8 @@ export function UserProfileModal({
                 {/* Avatar */}
                 <div className="mx-auto">
                   <AvatarUpload 
-                    currentAvatar={profile?.avatar_url}
-                    userName={userName}
+                    currentAvatar={profile?.avatar_url || null}
+                    userName={profile?.name || userName}
                     size="lg"
                     editable={false}
                   />
@@ -115,11 +126,8 @@ export function UserProfileModal({
 
                 {/* User Info */}
                 <div>
-                  <h3 className="text-xl font-bold">{userName}</h3>
+                  <h3 className="text-xl font-bold">{profile?.name || userName}</h3>
                   <p className="text-muted-foreground">{profile?.email || 'No email available'}</p>
-                  {profile?.role && (
-                    <p className="text-sm text-primary font-medium">{profile.role}</p>
-                  )}
                   {profile?.college && (
                     <p className="text-sm text-muted-foreground">{profile.college}</p>
                   )}

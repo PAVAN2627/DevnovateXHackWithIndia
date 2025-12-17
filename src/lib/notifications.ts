@@ -107,25 +107,45 @@ export const notificationService = {
     });
   },
 
-  addBlogCommentNotification: (blogId: string, blogTitle: string, commenterName: string, commentPreview: string) => {
+  addBlogCommentNotification: (blogAuthorId: string, blogId: string, blogTitle: string, commenterName: string, commentPreview: string) => {
     return notificationService.addNotification({
       type: 'blog_comment',
       title: `New comment on "${blogTitle}"`,
       message: `${commenterName}: ${commentPreview.substring(0, 80)}`,
+      userId: blogAuthorId,
       itemId: blogId,
       read: false,
       action_url: `/blog/${blogId}`,
     });
   },
 
-  addIssueCommentNotification: (issueId: string, issueTitle: string, commenterName: string, commentPreview: string) => {
+  addIssueCommentNotification: (issueAuthorId: string, issueId: string, issueTitle: string, commenterName: string, commentPreview: string) => {
     return notificationService.addNotification({
       type: 'issue_comment',
       title: `New comment on "${issueTitle}"`,
       message: `${commenterName}: ${commentPreview.substring(0, 80)}`,
+      userId: issueAuthorId,
       itemId: issueId,
       read: false,
       action_url: `/issues/${issueId}`,
+    });
+  },
+
+  addAnnouncementNotification: (participantId: string, hackathonId: string, hackathonTitle: string, organizerName: string, announcementTitle: string) => {
+    return notificationService.addNotification({
+      type: 'announcement',
+      title: `New announcement in ${hackathonTitle}`,
+      message: `${organizerName} posted: ${announcementTitle}`,
+      userId: participantId,
+      itemId: hackathonId,
+      read: false,
+      action_url: `/announcements`,
+      data: {
+        hackathonId,
+        hackathonTitle,
+        organizerName,
+        announcementTitle,
+      },
     });
   },
 };

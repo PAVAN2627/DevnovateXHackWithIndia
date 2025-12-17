@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
-import { storage } from '@/lib/storage';
+import { supabase } from '@/integrations/supabase/client';
 import { AvatarUpload } from '@/components/AvatarUpload';
 import { toast } from 'sonner';
 
@@ -57,7 +57,7 @@ export default function Profile() {
     }
   }, [userId, authLoading]);
 
-  const loadProfile = () => {
+  const loadProfile = async () => {
     try {
       const targetUserId = userId || currentUser?.id;
       if (!targetUserId) {
@@ -65,17 +65,32 @@ export default function Profile() {
         return;
       }
 
-      const profileData = storage.getProfile(targetUserId);
-      const userData = storage.getUser(targetUserId);
-      const roleData = storage.getUserRole(targetUserId);
+      // Get profile from Supabase
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', targetUserId)
+        .single();
 
-      if (profileData && userData) {
+      if (profileError) {
+        console.error('Error loading profile:', profileError);
+        setLoading(false);
+        return;
+      }
+
+      // Get user role
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', targetUserId)
+        .single();
+
+      if (profileData) {
         const fullProfile = {
           ...profileData,
-          email: userData.email,
-          role: roleData || 'participant',
+          role: roleData?.role || 'participant',
         };
-        setProfile(fullProfile);
+        setProfile(fullProfile as UserProfile);
         setFormData({
           name: fullProfile.name || '',
           college: fullProfile.college || '',
@@ -95,7 +110,7 @@ export default function Profile() {
     }
   };
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     if (!formData.name.trim()) {
       toast.error('Name is required');
       return;
@@ -103,12 +118,24 @@ export default function Profile() {
 
     try {
       const targetUserId = userId || currentUser?.id;
-      storage.addProfile(targetUserId!, {
-        ...formData,
-        email: profile?.email,
-      });
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          name: formData.name,
+          college: formData.college,
+          skills: formData.skills,
+          bio: formData.bio,
+          linkedin: formData.linkedin,
+          github: formData.github,
+          twitter: formData.twitter,
+          portfolio: formData.portfolio,
+        })
+        .eq('user_id', targetUserId);
 
-      loadProfile();
+      if (error) throw error;
+
+      await loadProfile();
       setIsEditing(false);
       toast.success('Profile updated successfully!');
     } catch (error: any) {

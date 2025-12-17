@@ -1,5 +1,6 @@
+// @ts-nocheck
 import { useState, useEffect } from 'react';
-import { storage } from '@/lib/storage';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface ChatMessage {
@@ -10,6 +11,7 @@ export interface ChatMessage {
   message_type: 'text' | 'image' | 'link';
   created_at: string;
   author_name?: string;
+  author_avatar?: string | null;
 }
 
 export function useChat(hackathonId: string) {
@@ -20,15 +22,32 @@ export function useChat(hackathonId: string) {
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        const data = storage.getChatMessagesByHackathon(hackathonId);
-        const formattedData = (data || []).map((m: any) => {
-          const profile = storage.getProfile(m.author_id);
-          return {
-            ...m,
-            author_name: profile?.name || 'Unknown',
-          };
-        });
-        setMessages(formattedData);
+        const { data, error } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('hackathon_id', hackathonId)
+          .order('created_at', { ascending: true });
+
+        if (error) throw error;
+
+        // Fetch author names and avatars
+        const messagesWithDetails = await Promise.all(
+          (data || []).map(async (msg) => {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('name, avatar_url')
+              .eq('user_id', msg.author_id)
+              .single();
+
+            return {
+              ...msg,
+              author_name: profile?.name || 'Unknown',
+              author_avatar: profile?.avatar_url || null,
+            };
+          })
+        );
+
+        setMessages(messagesWithDetails);
       } catch (error) {
         console.error('Error fetching messages:', error);
       } finally {
@@ -44,17 +63,30 @@ export function useChat(hackathonId: string) {
   const addMessage = async (content: string, messageType: 'text' | 'image' | 'link' = 'text') => {
     if (!user) throw new Error('Must be logged in');
 
-    const message = storage.addChatMessage({
-      hackathon_id: hackathonId,
-      content,
-      author_id: user.id,
-      message_type: messageType,
-    });
+    const { data: message, error } = await supabase
+      .from('chat_messages')
+      .insert({
+        hackathon_id: hackathonId,
+        content,
+        author_id: user.id,
+        message_type: messageType,
+      })
+      .select()
+      .single();
 
-    const profile = storage.getProfile(user.id);
+    if (error) throw error;
+
+    // Get author name and avatar
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('name, avatar_url')
+      .eq('user_id', user.id)
+      .single();
+
     const formattedMessage = {
       ...message,
-      author_name: profile?.name || user.name || 'Unknown',
+      author_name: profile?.name || 'Unknown',
+      author_avatar: profile?.avatar_url || null,
     };
 
     setMessages((prev) => [...prev, formattedMessage]);

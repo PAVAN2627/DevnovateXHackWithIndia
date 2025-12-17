@@ -52,6 +52,8 @@ export function NotificationBell() {
       case 'blog_comment':
       case 'issue_comment':
         return <MessageCircle className="h-4 w-4" />;
+      case 'announcement':
+        return <Megaphone className="h-4 w-4" />;
       default:
         return <Bell className="h-4 w-4" />;
     }

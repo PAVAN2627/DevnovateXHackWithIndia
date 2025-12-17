@@ -1,10 +1,6 @@
-// Image storage service - stores images in localStorage as compressed base64
+// Image storage service - uploads images to Supabase Storage
 
-const IMAGE_STORAGE_KEY = 'devnovate_images';
-
-interface ImageData {
-  [key: string]: string; // filename -> base64
-}
+import { supabase } from '@/integrations/supabase/client';
 
 // Compress image by resizing to max 800x600
 const compressImage = (canvas: HTMLCanvasElement, quality: number = 0.7): string => {
@@ -12,7 +8,7 @@ const compressImage = (canvas: HTMLCanvasElement, quality: number = 0.7): string
 };
 
 // Resize image to fit within max dimensions while maintaining aspect ratio
-const resizeImage = (file: File, maxWidth: number = 800, maxHeight: number = 600): Promise<string> => {
+const resizeImage = (file: File, maxWidth: number = 800, maxHeight: number = 600): Promise<File> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -44,8 +40,22 @@ const resizeImage = (file: File, maxWidth: number = 800, maxHeight: number = 600
         }
 
         ctx.drawImage(img, 0, 0, width, height);
-        const compressedBase64 = compressImage(canvas, 0.7);
-        resolve(compressedBase64);
+        
+        // Convert canvas to blob
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error('Could not create blob from canvas'));
+            return;
+          }
+          
+          // Create a new File from the blob
+          const compressedFile = new File([blob], file.name, {
+            type: 'image/jpeg',
+            lastModified: Date.now()
+          });
+          
+          resolve(compressedFile);
+        }, 'image/jpeg', 0.7);
       };
       img.onerror = () => reject(new Error('Could not load image'));
       img.src = e.target?.result as string;
@@ -56,30 +66,40 @@ const resizeImage = (file: File, maxWidth: number = 800, maxHeight: number = 600
 };
 
 export const imageStorage = {
-  // Get image by filename
-  getImage: (filename: string): string | null => {
+  // Upload image with compression to Supabase Storage
+  uploadImage: async (file: File): Promise<string> => {
     try {
-      const images = JSON.parse(localStorage.getItem(IMAGE_STORAGE_KEY) || '{}') as ImageData;
-      return images[filename] || null;
-    } catch {
-      return null;
-    }
-  },
+      // Resize and compress image
+      const compressedFile = await resizeImage(file, 800, 600);
+      const filename = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+      const filePath = `blog-images/${filename}`;
 
-  // Save image
-  saveImage: (filename: string, base64Data: string): string => {
-    try {
-      const images = JSON.parse(localStorage.getItem(IMAGE_STORAGE_KEY) || '{}') as ImageData;
-      images[filename] = base64Data;
-      localStorage.setItem(IMAGE_STORAGE_KEY, JSON.stringify(images));
-      return filename;
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('blog-images')
+        .upload(filePath, compressedFile, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) {
+        console.error('Error uploading image:', error);
+        throw error;
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('blog-images')
+        .getPublicUrl(data.path);
+
+      return publicUrl;
     } catch (error) {
-      console.error('Error saving image:', error);
+      console.error('Error uploading image:', error);
       throw error;
     }
   },
 
-  // Convert file to base64
+  // Convert file to base64 (for preview purposes)
   fileToBase64: (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -89,67 +109,33 @@ export const imageStorage = {
     });
   },
 
-  // Upload image with compression
-  uploadImage: async (file: File): Promise<string> => {
+  // Delete image from Supabase Storage
+  deleteImage: async (url: string) => {
     try {
-      // Resize and compress image
-      const compressedBase64 = await resizeImage(file, 800, 600);
-      const filename = `img_${Date.now()}_${file.name}`;
-      imageStorage.saveImage(filename, compressedBase64);
-      return compressedBase64; // Return the base64 data URL directly
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      throw error;
-    }
-  },
+      // Extract path from URL
+      const urlParts = url.split('/');
+      const path = urlParts.slice(-2).join('/'); // Get 'blog-images/filename'
+      
+      const { error } = await supabase.storage
+        .from('blog-images')
+        .remove([path]);
 
-  // Get image URL (for display)
-  getImageUrl: (filename: string): string => {
-    const base64 = imageStorage.getImage(filename);
-    if (base64) {
-      return base64; // base64 is already a data URL from fileToBase64
-    }
-    return '/assets/placeholder.png';
-  },
-
-  // Delete image
-  deleteImage: (filename: string) => {
-    try {
-      const images = JSON.parse(localStorage.getItem(IMAGE_STORAGE_KEY) || '{}') as ImageData;
-      delete images[filename];
-      localStorage.setItem(IMAGE_STORAGE_KEY, JSON.stringify(images));
+      if (error) {
+        console.error('Error deleting image:', error);
+        throw error;
+      }
     } catch (error) {
       console.error('Error deleting image:', error);
     }
   },
 
-  // Clear all images
-  clearAll: () => {
-    localStorage.removeItem(IMAGE_STORAGE_KEY);
-  },
-
-  // Get storage stats
+  // Get storage stats (placeholder for compatibility)
   getStorageStats: () => {
-    try {
-      const images = JSON.parse(localStorage.getItem(IMAGE_STORAGE_KEY) || '{}') as ImageData;
-      const appData = localStorage.getItem('devnovate_app_data') || '{}';
-      const imageSize = new Blob([JSON.stringify(images)]).size;
-      const appDataSize = new Blob([appData]).size;
-      const totalSize = imageSize + appDataSize;
-      
-      return {
-        images: imageSize,
-        appData: appDataSize,
-        total: totalSize,
-        formatted: `${(totalSize / 1024 / 1024).toFixed(2)}MB / ~5MB limit`
-      };
-    } catch {
-      return {
-        images: 0,
-        appData: 0,
-        total: 0,
-        formatted: 'Unknown'
-      };
-    }
+    return {
+      images: 0,
+      appData: 0,
+      total: 0,
+      formatted: 'Using Supabase Storage'
+    };
   }
 };

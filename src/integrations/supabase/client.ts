@@ -5,34 +5,44 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-// Clean up old localStorage data on initialization
+// Aggressive localStorage cleanup - Remove ALL old app data
 try {
+  // Check if we have the old app data key
+  const oldDataKey = 'devnovate_app_data';
+  if (localStorage.getItem(oldDataKey)) {
+    console.log('Found old localStorage data, removing...');
+    localStorage.removeItem(oldDataKey);
+    console.log('Old data removed successfully');
+  }
+
+  // Check total storage size
   const storageSize = JSON.stringify(localStorage).length;
   const sizeMB = storageSize / (1024 * 1024);
   
-  if (sizeMB > 5) {
-    console.log(`localStorage is ${sizeMB.toFixed(2)}MB, cleaning up old data...`);
+  console.log(`localStorage size: ${sizeMB.toFixed(2)}MB`);
+  
+  // If still too large, clear everything except Supabase auth
+  if (sizeMB > 3) {
+    console.log('localStorage too large, performing cleanup...');
     
-    // Keep only Supabase auth data
-    const keysToKeep: string[] = [];
+    // Save Supabase auth tokens temporarily
+    const authTokens: Record<string, string> = {};
     Object.keys(localStorage).forEach(key => {
-      if (key.startsWith('sb-') || key.includes('auth-token')) {
-        keysToKeep.push(key);
+      if (key.startsWith('sb-') && key.includes('auth-token')) {
+        const value = localStorage.getItem(key);
+        if (value) authTokens[key] = value;
       }
     });
     
     // Clear everything
     localStorage.clear();
     
-    // Restore Supabase auth data
-    keysToKeep.forEach(key => {
-      const value = sessionStorage.getItem(key);
-      if (value) {
-        try {
-          localStorage.setItem(key, value);
-        } catch (e) {
-          console.error('Failed to restore key:', key);
-        }
+    // Restore only auth tokens
+    Object.entries(authTokens).forEach(([key, value]) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch (e) {
+        console.error('Failed to restore auth token');
       }
     });
     
@@ -40,6 +50,13 @@ try {
   }
 } catch (error) {
   console.error('Error cleaning localStorage:', error);
+  // Last resort - clear everything
+  try {
+    localStorage.clear();
+    console.log('Performed emergency localStorage clear');
+  } catch (e) {
+    console.error('Emergency clear failed');
+  }
 }
 
 // Import the supabase client like this:

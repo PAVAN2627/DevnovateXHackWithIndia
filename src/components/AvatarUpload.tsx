@@ -2,8 +2,8 @@ import { useState, useRef } from 'react';
 import { Camera, User, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { imageStorage } from '@/lib/imageStorage';
-import { storage } from '@/lib/storage';
+import { fileStorage } from '@/lib/fileStorage';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -69,16 +69,34 @@ export function AvatarUpload({
 
     setIsUploading(true);
     try {
-      // Upload image
-      const avatarUrl = await imageStorage.uploadImage(file);
+      // Upload image to Supabase Storage
+      const fileMetadata = await fileStorage.uploadFile({
+        file,
+        bucket: 'user-avatars',
+        folder: user.id,
+        compress: true,
+        maxWidth: 400,
+        maxHeight: 400,
+        quality: 0.9
+      });
+
+      if (!fileMetadata) {
+        throw new Error('Failed to upload avatar');
+      }
+
+      const avatarUrl = fileMetadata.publicUrl;
       
-      // Update profile in storage
-      storage.updateProfile(user.id, { avatar_url: avatarUrl });
+      // Update profile in Supabase
+      const { error } = await supabase
+        .from('profiles')
+        .update({ avatar_url: avatarUrl })
+        .eq('user_id', user.id);
+
+      if (error) throw error;
       
-      // Update auth context with fresh profile data
-      const updatedProfile = storage.getProfile(user.id);
-      if (updateProfile && updatedProfile) {
-        updateProfile(updatedProfile);
+      // Update auth context
+      if (updateProfile) {
+        updateProfile({ avatar_url: avatarUrl });
       }
       
       // Call callback
@@ -99,13 +117,17 @@ export function AvatarUpload({
     if (!user) return;
 
     try {
-      // Update profile in storage
-      storage.updateProfile(user.id, { avatar_url: null });
+      // Update profile in Supabase
+      const { error } = await supabase
+        .from('profiles')
+        .update({ avatar_url: null })
+        .eq('user_id', user.id);
+
+      if (error) throw error;
       
-      // Update auth context with fresh profile data
-      const updatedProfile = storage.getProfile(user.id);
-      if (updateProfile && updatedProfile) {
-        updateProfile(updatedProfile);
+      // Update auth context
+      if (updateProfile) {
+        updateProfile({ avatar_url: null });
       }
       
       // Call callback
@@ -120,7 +142,9 @@ export function AvatarUpload({
   };
 
   // Show the correct avatar based on context
-  const displayAvatar = previewUrl || currentAvatar || (editable && profile?.avatar_url ? profile.avatar_url : null);
+  // Use a default avatar if none is set
+  const defaultAvatar = 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + (userName || 'organizer');
+  const displayAvatar = previewUrl || currentAvatar || (editable && profile?.avatar_url ? profile.avatar_url : null) || defaultAvatar;
 
   return (
     <div className="relative inline-block">

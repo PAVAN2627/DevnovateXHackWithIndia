@@ -1,15 +1,13 @@
 import { useState } from 'react';
-import { Pin, Send, Megaphone, User } from 'lucide-react';
+import { Pin, Send, Megaphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { Announcement } from '@/hooks/useAnnouncements';
 import { LinkRenderer } from '@/lib/linkDetector';
 import { AvatarUpload } from '@/components/AvatarUpload';
 import { RelativeTime, RelativeTimeTooltip } from '@/components/RelativeTime';
-import { storage } from '@/lib/storage';
 
 interface AnnouncementSectionProps {
   announcements: Announcement[];
@@ -118,7 +116,7 @@ export function AnnouncementSection({ announcements, isOrganizer, onPostAnnounce
             >
               <div className="flex items-start gap-3 mb-4">
                 <AvatarUpload 
-                  currentAvatar={storage.getProfile(announcement.author_id)?.avatar_url || null}
+                  currentAvatar={announcement.author_avatar || null}
                   userName={announcement.author_name}
                   size="sm"
                   editable={false}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { storage } from '@/lib/storage';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export function useUnreadAnnouncements() {
@@ -12,28 +12,26 @@ export function useUnreadAnnouncements() {
       return;
     }
 
-    const calculateUnreadCount = () => {
+    const calculateUnreadCount = async () => {
       try {
         // Get user's last read timestamp for announcements
         const lastReadKey = `announcements_last_read_${user.id}`;
         const lastReadTimestamp = localStorage.getItem(lastReadKey);
         const lastRead = lastReadTimestamp ? new Date(lastReadTimestamp) : new Date(0);
 
-        // Get all hackathons and their announcements
-        const hackathons = storage.getAllHackathons();
-        let totalUnread = 0;
+        // Get all announcements from Supabase
+        const { data: announcements, error } = await supabase
+          .from('announcements')
+          .select('*')
+          .gt('created_at', lastRead.toISOString());
 
-        hackathons.forEach((hackathon: any) => {
-          const announcements = storage.getAnnouncementsByHackathon(hackathon.id);
-          const unreadInHackathon = announcements.filter((announcement: any) => {
-            const announcementDate = new Date(announcement.created_at);
-            return announcementDate > lastRead;
-          }).length;
-          
-          totalUnread += unreadInHackathon;
-        });
+        if (error) {
+          console.error('Error fetching announcements:', error);
+          setUnreadCount(0);
+          return;
+        }
 
-        setUnreadCount(totalUnread);
+        setUnreadCount(announcements?.length || 0);
       } catch (error) {
         console.error('Error calculating unread announcements:', error);
         setUnreadCount(0);

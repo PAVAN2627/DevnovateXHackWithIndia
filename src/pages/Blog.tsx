@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Plus, Search, Heart, Edit, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Plus, Search, Heart, Edit, Trash2, MessageCircle } from 'lucide-react';
 import { Navigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
-import { storage } from '@/lib/storage';
-import { imageStorage } from '@/lib/imageStorage';
+import { useBlogs } from '@/hooks/useBlogs';
 import { AvatarUpload } from '@/components/AvatarUpload';
+import { RelativeTime } from '@/components/RelativeTime';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -25,7 +25,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { RichBlogEditor, uploadAllImages, processContentWithImageUrls } from '@/components/RichBlogEditor';
+import { RichBlogEditor, uploadAllImages, processContentWithImageUrls} from '@/components/RichBlogEditor';
+import { fileStorage } from '@/lib/fileStorage';
 
 interface BlogPost {
   id: string;
@@ -34,9 +35,11 @@ interface BlogPost {
   excerpt?: string;
   author_id: string;
   author_name?: string;
+  author_avatar?: string | null;
   image_url?: string;
   tags: string[];
   likes: number;
+  comment_count?: number;
   created_at: string;
   updated_at?: string;
 }
@@ -53,8 +56,7 @@ const generateExcerpt = (content: string): string => {
 
 export default function Blog() {
   const { user, loading: authLoading, isOrganizer } = useAuth();
-  const [blogs, setBlogs] = useState<BlogPost[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { blogs, loading, createBlog, updateBlog, deleteBlog } = useBlogs();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'latest' | 'popular' | 'tags'>('latest');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -70,30 +72,6 @@ export default function Blog() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (!authLoading) {
-      loadBlogs();
-    }
-  }, [authLoading]);
-
-  const loadBlogs = () => {
-    try {
-      const allBlogs = storage.getAllBlogs();
-      const formattedBlogs = (allBlogs || []).map((b: any) => {
-        const profile = storage.getProfile(b.author_id);
-        return {
-          ...b,
-          author_name: profile?.name || 'Anonymous',
-        };
-      });
-      setBlogs(formattedBlogs);
-    } catch (error) {
-      console.error('Error loading blogs:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleCreateBlog = async () => {
     if (!newBlog.title.trim() || !newBlog.content.trim()) {
       toast.error('Please fill in all fields');
@@ -104,26 +82,26 @@ export default function Blog() {
     try {
       let imageUrl = null;
       if (newBlog.image) {
-        imageUrl = await imageStorage.uploadImage(newBlog.image);
+        const fileMetadata = await fileStorage.uploadFile({
+          file: newBlog.image,
+          bucket: 'blog-images',
+          folder: user!.id,
+          compress: true,
+          maxWidth: 1200,
+          maxHeight: 800,
+          quality: 0.85
+        });
+        imageUrl = fileMetadata?.publicUrl || null;
       }
 
-      const blog = storage.addBlog({
+      await createBlog({
         title: newBlog.title.trim(),
         content: newBlog.content.trim(),
         excerpt: generateExcerpt(newBlog.content),
-        author_id: user.id,
         tags: newBlog.tags.split(',').map((t: string) => t.trim()).filter(Boolean),
         image_url: imageUrl,
-        likes: 0,
       });
 
-      const profile = storage.getProfile(user.id);
-      const formattedBlog = {
-        ...blog,
-        author_name: profile?.name || 'Anonymous',
-      };
-
-      setBlogs((prev) => [formattedBlog, ...prev]);
       setNewBlog({ title: '', content: '', tags: '', image: null });
       setIsModalOpen(false);
       toast.success('Blog post published!');
@@ -155,10 +133,19 @@ export default function Blog() {
     try {
       let imageUrl = selectedBlog.image_url;
       if (newBlog.image) {
-        imageUrl = await imageStorage.uploadImage(newBlog.image as File);
+        const fileMetadata = await fileStorage.uploadFile({
+          file: newBlog.image as File,
+          bucket: 'blog-images',
+          folder: user!.id,
+          compress: true,
+          maxWidth: 1200,
+          maxHeight: 800,
+          quality: 0.85
+        });
+        imageUrl = fileMetadata?.publicUrl || null;
       }
 
-      storage.updateBlog(selectedBlog.id, {
+      await updateBlog(selectedBlog.id, {
         title: newBlog.title.trim(),
         content: newBlog.content.trim(),
         excerpt: generateExcerpt(newBlog.content),
@@ -166,20 +153,6 @@ export default function Blog() {
         tags: newBlog.tags.split(',').map((t: string) => t.trim()).filter(Boolean),
       });
 
-      setBlogs((prev) =>
-        prev.map((b) =>
-          b.id === selectedBlog.id
-            ? {
-                ...b,
-                title: newBlog.title.trim(),
-                content: newBlog.content.trim(),
-                excerpt: generateExcerpt(newBlog.content),
-                image_url: imageUrl,
-                tags: newBlog.tags.split(',').map((t: string) => t.trim()).filter(Boolean),
-              }
-            : b
-        )
-      );
       setIsEditModalOpen(false);
       setSelectedBlog(null);
       setNewBlog({ title: '', content: '', tags: '', image: null });
@@ -200,8 +173,7 @@ export default function Blog() {
     if (!blogToDelete) return;
 
     try {
-      storage.deleteBlog(blogToDelete.id);
-      setBlogs((prev) => prev.filter((b) => b.id !== blogToDelete.id));
+      await deleteBlog(blogToDelete.id);
       setDeleteConfirmOpen(false);
       setBlogToDelete(null);
       toast.success('Blog deleted successfully!');
@@ -224,7 +196,12 @@ export default function Blog() {
 
     // Tab filter
     if (activeTab === 'popular') {
-      filtered = filtered.sort((a, b) => (b.likes || 0) - (a.likes || 0));
+      // Sort by popularity score: likes + comments (weighted)
+      filtered = filtered.sort((a, b) => {
+        const scoreA = (a.likes || 0) + (a.comment_count || 0) * 0.5;
+        const scoreB = (b.likes || 0) + (b.comment_count || 0) * 0.5;
+        return scoreB - scoreA;
+      });
     } else if (activeTab === 'latest') {
       filtered = filtered.sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -377,24 +354,24 @@ export default function Blog() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <AvatarUpload 
-                          currentAvatar={storage.getProfile(blog.author_id)?.avatar_url || null}
+                          currentAvatar={blog.author_avatar || null}
                           userName={blog.author_name}
                           size="sm"
                           editable={false}
                         />
                         <span>{blog.author_name}</span>
                         <span>•</span>
-                        <span>
-                          {new Date(blog.created_at).toLocaleDateString('en-IN', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
-                        </span>
+                        <RelativeTime timestamp={blog.created_at} format="short" />
                       </div>
-                      <div className="flex items-center gap-1 text-muted-foreground">
-                        <Heart className="h-4 w-4" />
-                        <span className="text-sm">{blog.likes || 0}</span>
+                      <div className="flex items-center gap-4 text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <Heart className="h-4 w-4" />
+                          <span className="text-sm">{blog.likes || 0}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <MessageCircle className="h-4 w-4" />
+                          <span className="text-sm">{blog.comment_count || 0}</span>
+                        </div>
                       </div>
                     </div>
 

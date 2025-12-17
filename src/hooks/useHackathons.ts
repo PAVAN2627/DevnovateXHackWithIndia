@@ -32,22 +32,36 @@ export function useHackathons() {
     try {
       const { data, error } = await supabase
         .from('hackathons')
-        .select(`
-          *,
-          organizer:profiles!organizer_id(name),
-          participants:hackathon_participants(count)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const formattedData = (data || []).map((h: any) => ({
-        ...h,
-        organizer_name: h.organizer?.name || 'Unknown',
-        participant_count: h.participants?.[0]?.count || 0,
-      }));
+      // Fetch organizer names separately
+      const hackathonsWithDetails = await Promise.all(
+        (data || []).map(async (h: any) => {
+          // Get organizer name
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('user_id', h.organizer_id)
+            .single();
+
+          // Get participant count
+          const { count } = await supabase
+            .from('hackathon_participants')
+            .select('*', { count: 'exact', head: true })
+            .eq('hackathon_id', h.id);
+
+          return {
+            ...h,
+            organizer_name: profile?.name || 'Unknown',
+            participant_count: count || 0,
+          };
+        })
+      );
       
-      setHackathons(formattedData);
+      setHackathons(hackathonsWithDetails);
     } catch (error) {
       console.error('Error fetching hackathons:', error);
     } finally {
@@ -179,21 +193,30 @@ export function useHackathon(id: string) {
       try {
         const { data, error } = await supabase
           .from('hackathons')
-          .select(`
-            *,
-            organizer:profiles!organizer_id(name),
-            participants:hackathon_participants(count)
-          `)
+          .select('*')
           .eq('id', id)
           .single();
 
         if (error) throw error;
 
         if (data) {
+          // Get organizer name
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('user_id', data.organizer_id)
+            .single();
+
+          // Get participant count
+          const { count } = await supabase
+            .from('hackathon_participants')
+            .select('*', { count: 'exact', head: true })
+            .eq('hackathon_id', data.id);
+
           setHackathon({
             ...data,
-            organizer_name: data.organizer?.name || 'Unknown',
-            participant_count: data.participants?.[0]?.count || 0,
+            organizer_name: profile?.name || 'Unknown',
+            participant_count: count || 0,
           });
         }
       } catch (error) {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { Trophy, Users, BookOpen, AlertCircle, BarChart3, X, CheckCircle } from 'lucide-react';
+import { Trophy, Users, BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { CreateHackathonButton } from '@/components/dashboard/CreateHackathonButton';
 import { HackathonCard } from '@/components/dashboard/HackathonCard';
@@ -25,13 +25,15 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHackathons, Hackathon } from '@/hooks/useHackathons';
-import { storage } from '@/lib/storage';
+import { useDashboardStats } from '@/hooks/useDashboardStats';
+import { supabase } from '@/integrations/supabase/client';
 import { RelativeTime } from '@/components/RelativeTime';
 import { toast } from 'sonner';
 
 export default function Dashboard() {
   const { user, profile, isOrganizer, loading: authLoading } = useAuth();
   const { hackathons, loading, createHackathon, uploadHackathonImage, editHackathon, deleteHackathon } = useHackathons();
+  const { stats, loading: statsLoading } = useDashboardStats();
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -135,74 +137,91 @@ export default function Dashboard() {
     0
   );
 
-  // Get analytics for organizer
-  const allUsers = Object.values((storage.getData && storage.getData().users) || {});
-  const allBlogs = storage.getAllBlogs?.() || [];
-  const allIssues = storage.getAllIssues?.() || [];
-  const resolvedIssues = (allIssues || []).filter((i: any) => i.status === 'resolved' || i.status === 'closed').length;
-
-  const handleStatsClick = (type: 'hackathons' | 'users' | 'blogs' | 'issues') => {
+  const handleStatsClick = async (type: 'hackathons' | 'users' | 'blogs' | 'issues') => {
     let data: any[] = [];
     
-    switch (type) {
-      case 'hackathons':
-        data = displayHackathons.map(h => ({
-          id: h.id,
-          title: h.title,
-          status: h.status,
-          mode: h.mode,
-          start_date: h.start_date,
-          end_date: h.end_date,
-          created_at: h.created_at
-        }));
-        break;
-      case 'users':
-        data = allUsers.map((u: any) => {
-          const profile = storage.getProfile(u.id);
-          return {
-            id: u.id,
-            name: profile?.name || 'Anonymous',
+    try {
+      switch (type) {
+        case 'hackathons':
+          data = displayHackathons.map(h => ({
+            id: h.id,
+            title: h.title,
+            status: h.status,
+            mode: h.mode,
+            start_date: h.start_date,
+            end_date: h.end_date,
+            created_at: h.created_at
+          }));
+          break;
+        case 'users':
+          const { data: usersData } = await supabase
+            .from('profiles')
+            .select('user_id, name, email, created_at')
+            .order('created_at', { ascending: false });
+          
+          data = (usersData || []).map((u: any) => ({
+            id: u.user_id,
+            name: u.name || 'Anonymous',
             email: u.email,
-            role: storage.getUserRole(u.id),
-            created_at: u.createdAt
-          };
-        });
-        break;
-      case 'blogs':
-        data = allBlogs.map((b: any) => {
-          const profile = storage.getProfile(b.author_id);
-          return {
+            role: 'user', // You can add role logic here if needed
+            created_at: u.created_at
+          }));
+          break;
+        case 'blogs':
+          const { data: blogsData } = await supabase
+            .from('blogs')
+            .select(`
+              id, title, likes, created_at, author_id,
+              profiles!blogs_author_id_fkey(name)
+            `)
+            .order('created_at', { ascending: false });
+          
+          data = (blogsData || []).map((b: any) => ({
             id: b.id,
             title: b.title,
-            author: profile?.name || 'Anonymous',
+            author: b.profiles?.name || 'Anonymous',
             likes: b.likes || 0,
-            created_at: b.created_at || b.createdAt
-          };
-        });
-        break;
-      case 'issues':
-        data = allIssues.map((i: any) => {
-          const profile = storage.getProfile(i.author_id);
-          return {
+            created_at: b.created_at
+          }));
+          break;
+        case 'issues':
+          const { data: issuesData } = await supabase
+            .from('issues')
+            .select(`
+              id, title, status, priority, created_at, author_id,
+              profiles!issues_author_id_fkey(name)
+            `)
+            .order('created_at', { ascending: false });
+          
+          data = (issuesData || []).map((i: any) => ({
             id: i.id,
             title: i.title,
-            author: profile?.name || 'Anonymous',
+            author: i.profiles?.name || 'Anonymous',
             status: i.status,
             priority: i.priority,
-            created_at: i.created_at || i.createdAt
-          };
-        });
-        break;
+            created_at: i.created_at
+          }));
+          break;
+      }
+      
+      setDetailsModalType(type);
+      setDetailsModalData(data);
+      setDetailsModalOpen(true);
+    } catch (error) {
+      console.error('Error fetching details data:', error);
+      toast.error('Failed to load details');
     }
-    
-    setDetailsModalType(type);
-    setDetailsModalData(data);
-    setDetailsModalOpen(true);
   };
 
-  const handleCloseIssue = (issueId: string) => {
+  const handleCloseIssue = async (issueId: string) => {
     try {
-      storage.updateIssue(issueId, { status: 'closed' });
+      const { error } = await supabase
+        .from('issues')
+        .update({ status: 'closed' })
+        .eq('id', issueId);
+
+      if (error) throw error;
+
       // Refresh the data
       const updatedData = detailsModalData.map(item => 
         item.id === issueId ? { ...item, status: 'closed' } : item
@@ -210,11 +229,12 @@ export default function Dashboard() {
       setDetailsModalData(updatedData);
       toast.success('Issue closed successfully!');
     } catch (error) {
+      console.error('Error closing issue:', error);
       toast.error('Failed to close issue');
     }
   };
 
-  const stats = isOrganizer ? [
+  const dashboardStats = isOrganizer ? [
     { 
       title: 'Your Hackathons', 
       value: displayHackathons.length, 
@@ -225,7 +245,7 @@ export default function Dashboard() {
     },
     { 
       title: 'Total Users', 
-      value: allUsers.length, 
+      value: statsLoading ? '...' : stats.totalUsers, 
       change: '', 
       changeType: 'neutral' as const, 
       icon: Users,
@@ -233,7 +253,7 @@ export default function Dashboard() {
     },
     { 
       title: 'Total Blogs', 
-      value: allBlogs.length, 
+      value: statsLoading ? '...' : stats.totalBlogs, 
       change: '', 
       changeType: 'neutral' as const, 
       icon: BookOpen,
@@ -241,8 +261,8 @@ export default function Dashboard() {
     },
     {
       title: 'Issues Solved',
-      value: resolvedIssues,
-      change: `of ${allIssues.length} total`,
+      value: statsLoading ? '...' : stats.resolvedIssues,
+      change: statsLoading ? '' : `of ${stats.totalIssues} total`,
       changeType: 'neutral' as const,
       icon: AlertCircle,
       onClick: () => handleStatsClick('issues')
@@ -266,7 +286,7 @@ export default function Dashboard() {
       {/* Stats - Only for organizers */}
       {isOrganizer && (
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 px-4 md:px-0">
-          {stats.map((stat) => (
+          {dashboardStats.map((stat) => (
             <StatsCard key={stat.title} {...stat} />
           ))}
         </div>

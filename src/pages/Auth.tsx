@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { resetToSampleData } from '@/lib/sampleData';
+import { DEFAULT_ORGANIZER } from '@/config/organizer';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),

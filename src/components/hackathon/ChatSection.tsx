@@ -8,7 +8,6 @@ import { cn } from '@/lib/utils';
 import { ChatMessage } from '@/hooks/useChat';
 import { LinkRenderer } from '@/lib/linkDetector';
 import { AvatarUpload } from '@/components/AvatarUpload';
-import { storage } from '@/lib/storage';
 
 interface ChatSectionProps {
   messages: ChatMessage[];
@@ -90,7 +89,7 @@ export function ChatSection({ messages, onSendMessage, onProfileClick, loading }
                 )}
               >
                 <AvatarUpload 
-                  currentAvatar={storage.getProfile(message.author_id)?.avatar_url || null}
+                  currentAvatar={message.author_avatar || null}
                   userName={message.author_name}
                   size="sm"
                   editable={false}
