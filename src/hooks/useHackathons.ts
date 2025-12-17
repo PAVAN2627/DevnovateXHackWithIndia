@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { storage } from '@/lib/storage';
-import { imageStorage } from '@/lib/imageStorage';
+import { supabase } from '@/integrations/supabase/client';
+import { fileStorage } from '@/lib/fileStorage';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface Hackathon {
@@ -30,12 +30,23 @@ export function useHackathons() {
 
   const fetchHackathons = async () => {
     try {
-      const allHackathons = storage.getAllHackathons();
-      const formattedData = (allHackathons || []).map((h: any) => ({
+      const { data, error } = await supabase
+        .from('hackathons')
+        .select(`
+          *,
+          organizer:profiles!organizer_id(name),
+          participants:hackathon_participants(count)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedData = (data || []).map((h: any) => ({
         ...h,
-        organizer_name: 'Devnovate X HackWithIndia',
-        participant_count: storage.getHackathonParticipants(h.id).length,
+        organizer_name: h.organizer?.name || 'Unknown',
+        participant_count: h.participants?.[0]?.count || 0,
       }));
+      
       setHackathons(formattedData);
     } catch (error) {
       console.error('Error fetching hackathons:', error);
@@ -47,29 +58,46 @@ export function useHackathons() {
   const createHackathon = async (hackathonData: Partial<Hackathon>) => {
     if (!user) throw new Error('Must be logged in');
 
-    const newHackathon = storage.addHackathon({
-      title: hackathonData.title,
-      description: hackathonData.description,
-      start_date: hackathonData.start_date,
-      end_date: hackathonData.end_date,
-      registration_deadline: hackathonData.registration_deadline,
-      location: hackathonData.location,
-      mode: hackathonData.mode,
-      max_participants: hackathonData.max_participants,
-      prizes: hackathonData.prizes,
-      tags: hackathonData.tags,
-      image_url: hackathonData.image_url,
-      organizer_id: user.id,
-      status: 'upcoming',
-    });
+    const { data, error } = await supabase
+      .from('hackathons')
+      .insert({
+        title: hackathonData.title,
+        description: hackathonData.description,
+        start_date: hackathonData.start_date,
+        end_date: hackathonData.end_date,
+        registration_deadline: hackathonData.registration_deadline,
+        location: hackathonData.location,
+        mode: hackathonData.mode,
+        max_participants: hackathonData.max_participants,
+        prizes: hackathonData.prizes,
+        tags: hackathonData.tags,
+        image_url: hackathonData.image_url,
+        organizer_id: user.id,
+        status: 'upcoming',
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
 
     await fetchHackathons();
-    return newHackathon;
+    return data;
   };
 
   const uploadHackathonImage = async (file: File): Promise<string> => {
     try {
-      return await imageStorage.uploadImage(file);
+      const fileMetadata = await fileStorage.uploadFile({
+        file,
+        bucket: 'hackathon-media',
+        folder: user?.id || 'public',
+        compress: true,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        quality: 0.85
+      });
+
+      if (!fileMetadata) throw new Error('Failed to upload image');
+      return fileMetadata.publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
       throw error;
@@ -79,25 +107,51 @@ export function useHackathons() {
   const editHackathon = async (hackathonId: string, updates: Partial<Hackathon>) => {
     if (!user) throw new Error('Must be logged in');
     
-    const hackathon = storage.getHackathon(hackathonId);
+    const { data: hackathon, error: fetchError } = await supabase
+      .from('hackathons')
+      .select('organizer_id')
+      .eq('id', hackathonId)
+      .single();
+
+    if (fetchError) throw fetchError;
     if (hackathon?.organizer_id !== user.id) {
       throw new Error('Only organizer can edit this hackathon');
     }
 
-    const updated = storage.updateHackathon(hackathonId, updates);
+    const { data, error } = await supabase
+      .from('hackathons')
+      .update(updates)
+      .eq('id', hackathonId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
     await fetchHackathons();
-    return updated;
+    return data;
   };
 
   const deleteHackathon = async (hackathonId: string) => {
     if (!user) throw new Error('Must be logged in');
     
-    const hackathon = storage.getHackathon(hackathonId);
+    const { data: hackathon, error: fetchError } = await supabase
+      .from('hackathons')
+      .select('organizer_id')
+      .eq('id', hackathonId)
+      .single();
+
+    if (fetchError) throw fetchError;
     if (hackathon?.organizer_id !== user.id) {
       throw new Error('Only organizer can delete this hackathon');
     }
 
-    storage.deleteHackathon(hackathonId);
+    const { error } = await supabase
+      .from('hackathons')
+      .delete()
+      .eq('id', hackathonId);
+
+    if (error) throw error;
+
     await fetchHackathons();
   };
 
@@ -121,20 +175,35 @@ export function useHackathon(id: string) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const data = storage.getHackathon(id);
-      if (data) {
-        setHackathon({
-          ...data,
-          organizer_name: 'Devnovate X HackWithIndia',
-          participant_count: storage.getHackathonParticipants(id).length,
-        });
+    const fetchHackathon = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('hackathons')
+          .select(`
+            *,
+            organizer:profiles!organizer_id(name),
+            participants:hackathon_participants(count)
+          `)
+          .eq('id', id)
+          .single();
+
+        if (error) throw error;
+
+        if (data) {
+          setHackathon({
+            ...data,
+            organizer_name: data.organizer?.name || 'Unknown',
+            participant_count: data.participants?.[0]?.count || 0,
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching hackathon:', error);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching hackathon:', error);
-    } finally {
-      setLoading(false);
-    }
+    };
+
+    fetchHackathon();
   }, [id]);
 
   return { hackathon, loading };
