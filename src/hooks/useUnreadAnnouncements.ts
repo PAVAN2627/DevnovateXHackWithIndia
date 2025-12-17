@@ -19,7 +19,7 @@ export function useUnreadAnnouncements() {
         const lastReadTimestamp = localStorage.getItem(lastReadKey);
         const lastRead = lastReadTimestamp ? new Date(lastReadTimestamp) : new Date(0);
 
-        // Get all announcements from Supabase
+        // Get all announcements from Supabase that are newer than last read
         const { data: announcements, error } = await supabase
           .from('announcements')
           .select('*')
@@ -40,11 +40,11 @@ export function useUnreadAnnouncements() {
 
     calculateUnreadCount();
 
-    // Recalculate every 30 seconds
-    const interval = setInterval(calculateUnreadCount, 30000);
+    // Recalculate every 10 seconds for more responsive updates
+    const interval = setInterval(calculateUnreadCount, 10000);
 
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user?.id]); // Add user.id as dependency
 
   const markAllAsRead = () => {
     if (user) {

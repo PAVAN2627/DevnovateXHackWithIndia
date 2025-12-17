@@ -20,11 +20,7 @@ export function NotificationBell() {
 
   const loadNotifications = () => {
     if (user?.id) {
-      console.log('Loading notifications for user:', user.id);
-      const allNotifications = notificationService.getNotifications(); // Get all first
-      console.log('All notifications in storage:', allNotifications);
       const userNotifications = notificationService.getNotifications(user.id);
-      console.log('Filtered notifications for user:', userNotifications);
       setNotifications(userNotifications);
       setUnreadCount(notificationService.getUnreadCount(user.id));
     }
@@ -85,24 +81,6 @@ export function NotificationBell() {
           <div className="flex items-center justify-between p-4 border-b border-border">
             <h3 className="font-bold text-sm">Notifications</h3>
             <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  // Test notification
-                  if (user?.id) {
-                    notificationService.addNotification({
-                      type: 'message',
-                      title: 'Test Notification',
-                      message: 'This is a test notification',
-                      userId: user.id,
-                      read: false,
-                    });
-                    loadNotifications();
-                  }
-                }}
-                className="text-xs text-blue-500 hover:underline"
-              >
-                Test
-              </button>
               {unreadCount > 0 && (
                 <button
                   onClick={handleMarkAllRead}
