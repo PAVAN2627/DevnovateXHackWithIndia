@@ -19,12 +19,14 @@ export const notificationService = {
   // Create a new notification
   addNotification: async (notification: Omit<Notification, 'id' | 'created_at'>) => {
     try {
-      const { data, error } = await supabase
+      console.log('addNotification called with:', notification);
+      const { data, error } = await (supabase as any)
         .from('notifications')
         .insert(notification)
         .select()
         .single();
 
+      console.log('Notification insert result:', { data, error });
       if (error) throw error;
       return data;
     } catch (error) {
@@ -36,7 +38,7 @@ export const notificationService = {
   // Get notifications for a user
   getNotifications: async (userId: string): Promise<Notification[]> => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('notifications')
         .select('*')
         .eq('user_id', userId)
@@ -54,7 +56,7 @@ export const notificationService = {
   // Get unread count for a user
   getUnreadCount: async (userId: string): Promise<number> => {
     try {
-      const { count, error } = await supabase
+      const { count, error } = await (supabase as any)
         .from('notifications')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId)
@@ -71,7 +73,7 @@ export const notificationService = {
   // Mark notification as read
   markAsRead: async (notificationId: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('notifications')
         .update({ read: true })
         .eq('id', notificationId);
@@ -86,7 +88,7 @@ export const notificationService = {
   // Mark all notifications as read for a user
   markAllAsRead: async (userId: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('notifications')
         .update({ read: true })
         .eq('user_id', userId)
@@ -102,7 +104,7 @@ export const notificationService = {
   // Delete a notification
   deleteNotification: async (notificationId: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('notifications')
         .delete()
         .eq('id', notificationId);
@@ -117,7 +119,7 @@ export const notificationService = {
   // Clear all notifications for a user
   clearAll: async (userId: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('notifications')
         .delete()
         .eq('user_id', userId);
@@ -131,41 +133,50 @@ export const notificationService = {
 
   // Helper methods for specific notification types
   addMessageNotification: async (receiverId: string, senderId: string, senderName: string, messagePreview: string) => {
+    console.log('addMessageNotification called with:', { receiverId, senderId, senderName, messagePreview });
     const safeMessagePreview = (messagePreview || '').substring(0, 100);
-    return notificationService.addNotification({
+    const notification = {
       user_id: receiverId,
-      type: 'message',
+      type: 'message' as const,
       title: `New message from ${senderName}`,
       message: safeMessagePreview,
       action_url: `/messages?with=${senderId}`,
       read: false,
-    });
+    };
+    console.log('Creating message notification:', notification);
+    return notificationService.addNotification(notification);
   },
 
   addBlogCommentNotification: async (blogAuthorId: string, blogId: string, blogTitle: string, commenterName: string, commentPreview: string) => {
+    console.log('addBlogCommentNotification called with:', { blogAuthorId, blogId, blogTitle, commenterName, commentPreview });
     const safeCommentPreview = (commentPreview || '').substring(0, 80);
-    return notificationService.addNotification({
+    const notification = {
       user_id: blogAuthorId,
-      type: 'blog_comment',
+      type: 'blog_comment' as const,
       title: `New comment on "${blogTitle}"`,
       message: `${commenterName}: ${safeCommentPreview}`,
       item_id: blogId,
       action_url: `/blog/${blogId}`,
       read: false,
-    });
+    };
+    console.log('Creating blog comment notification:', notification);
+    return notificationService.addNotification(notification);
   },
 
   addIssueCommentNotification: async (issueAuthorId: string, issueId: string, issueTitle: string, commenterName: string, commentPreview: string) => {
+    console.log('addIssueCommentNotification called with:', { issueAuthorId, issueId, issueTitle, commenterName, commentPreview });
     const safeCommentPreview = (commentPreview || '').substring(0, 80);
-    return notificationService.addNotification({
+    const notification = {
       user_id: issueAuthorId,
-      type: 'issue_comment',
+      type: 'issue_comment' as const,
       title: `New comment on "${issueTitle}"`,
       message: `${commenterName}: ${safeCommentPreview}`,
       item_id: issueId,
       action_url: `/issues/${issueId}`,
       read: false,
-    });
+    };
+    console.log('Creating issue comment notification:', notification);
+    return notificationService.addNotification(notification);
   },
 
   addAnnouncementNotification: async (participantId: string, hackathonId: string, hackathonTitle: string, organizerName: string, announcementTitle: string) => {

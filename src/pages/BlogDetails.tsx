@@ -106,6 +106,7 @@ export default function BlogDetails() {
       // Send notification to blog author (only after successful comment addition)
       if (blog && blog.author_id !== user.id) {
         try {
+          console.log('Sending blog comment notification to:', blog.author_id);
           await notificationService.addBlogCommentNotification(
             blog.author_id,
             id!,
@@ -113,8 +114,9 @@ export default function BlogDetails() {
             user.email || 'Anonymous',
             newComment.trim()
           );
+          console.log('Blog comment notification sent successfully');
         } catch (notifError) {
-          console.error('Failed to send notification:', notifError);
+          console.error('Failed to send blog comment notification:', notifError);
           // Don't show error to user for notification failure
         }
       }

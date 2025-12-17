@@ -145,6 +145,7 @@ export default function IssueDetails() {
       // Send notification to issue author (only after successful comment addition)
       if (issue && issue.author_id !== user?.id) {
         try {
+          console.log('Sending issue comment notification to:', issue.author_id);
           await notificationService.addIssueCommentNotification(
             issue.author_id,
             id || '',
@@ -152,8 +153,9 @@ export default function IssueDetails() {
             user?.email || 'Anonymous',
             newComment.trim()
           );
+          console.log('Issue comment notification sent successfully');
         } catch (notifError) {
-          console.error('Failed to send notification:', notifError);
+          console.error('Failed to send issue comment notification:', notifError);
           // Don't show error to user for notification failure
         }
       }

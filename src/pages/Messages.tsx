@@ -527,11 +527,14 @@ export default function Messages() {
 
         // Send notification for text message
         try {
+          console.log('Sending message notification to:', selectedUser.id);
           const { data: senderProfile } = await supabase
             .from('profiles')
             .select('name')
             .eq('user_id', user.id)
             .single();
+          
+          console.log('Sender profile:', senderProfile);
           
           await notificationService.addMessageNotification(
             selectedUser.id,
@@ -539,8 +542,10 @@ export default function Messages() {
             senderProfile?.name || user.email || 'Anonymous',
             messageText
           );
+          
+          console.log('Message notification sent successfully');
         } catch (notificationError) {
-          console.error('Failed to send notification:', notificationError);
+          console.error('Failed to send message notification:', notificationError);
           // Don't fail the message sending if notification fails
         }
       }

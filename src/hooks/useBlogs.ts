@@ -149,7 +149,7 @@ export function useBlog(id: string) {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
-  const fetchBlog = async () => {
+  const fetchBlog = async (incrementViews = false) => {
     try {
       const { data, error } = await (supabase as any)
         .from('blogs')
@@ -160,6 +160,8 @@ export function useBlog(id: string) {
       if (error) throw error;
 
       if (data) {
+        console.log('Fetched blog data:', { id: data.id, likes: data.likes, title: data.title });
+
         // Get author name and avatar
         const { data: profile } = await supabase
           .from('profiles')
@@ -173,18 +175,23 @@ export function useBlog(id: string) {
           .select('*', { count: 'exact', head: true })
           .eq('blog_id', data.id);
 
-        setBlog({
+        const blogData = {
           ...data,
           author_name: profile?.name || 'Unknown',
           author_avatar: profile?.avatar_url || null,
           comment_count: count || 0,
-        });
+        };
 
-        // Increment views
-        await supabase
-          .from('blogs')
-          .update({ views: (data.views || 0) + 1 })
-          .eq('id', id);
+        console.log('Setting blog state with:', { likes: blogData.likes });
+        setBlog(blogData);
+
+        // Only increment views on initial load, not on refreshes
+        if (incrementViews) {
+          await supabase
+            .from('blogs')
+            .update({ views: (data.views || 0) + 1 })
+            .eq('id', id);
+        }
       }
     } catch (error) {
       console.error('Error fetching blog:', error);
@@ -292,39 +299,66 @@ export function useBlog(id: string) {
   const toggleLike = async () => {
     if (!user || !blog) throw new Error('Must be logged in');
 
-    // Check if already liked
-    const { data: existingLike } = await supabase
-      .from('blog_likes')
-      .select('id')
-      .eq('blog_id', id)
-      .eq('user_id', user.id)
-      .single();
+    console.log('toggleLike called:', { userId: user.id, blogId: id, currentLikes: blog.likes });
 
-    if (existingLike) {
-      // Unlike
-      await supabase
+    try {
+      // Check if already liked
+      const { data: existingLike, error: checkError } = await supabase
         .from('blog_likes')
-        .delete()
+        .select('id')
         .eq('blog_id', id)
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .single();
 
-      await supabase
-        .from('blogs')
-        .update({ likes: Math.max(0, blog.likes - 1) })
-        .eq('id', id);
-    } else {
-      // Like
-      await supabase
+      console.log('Existing like check:', { existingLike, checkError });
+
+      if (existingLike) {
+        // Unlike
+        console.log('Unliking blog...');
+        const { error: deleteError } = await supabase
+          .from('blog_likes')
+          .delete()
+          .eq('blog_id', id)
+          .eq('user_id', user.id);
+
+        console.log('Delete like result:', { deleteError });
+        if (deleteError) throw deleteError;
+      } else {
+        // Like
+        console.log('Liking blog...');
+        const { error: insertError } = await supabase
+          .from('blog_likes')
+          .insert({ blog_id: id, user_id: user.id });
+
+        console.log('Insert like result:', { insertError });
+        if (insertError) throw insertError;
+      }
+
+      // Get the actual count from database instead of using cached value
+      const { count: actualLikeCount, error: countError } = await supabase
         .from('blog_likes')
-        .insert({ blog_id: id, user_id: user.id });
+        .select('*', { count: 'exact', head: true })
+        .eq('blog_id', id);
 
-      await supabase
+      console.log('Actual like count from DB:', { actualLikeCount, countError });
+
+      if (countError) throw countError;
+
+      // Update the blog with the actual count
+      const { error: updateError } = await supabase
         .from('blogs')
-        .update({ likes: blog.likes + 1 })
+        .update({ likes: actualLikeCount || 0 })
         .eq('id', id);
-    }
 
-    await fetchBlog();
+      console.log('Update blog likes with actual count:', { updateError, actualCount: actualLikeCount });
+      if (updateError) throw updateError;
+
+      console.log('Fetching updated blog...');
+      await fetchBlog(false); // Don't increment views when refreshing after like
+    } catch (error) {
+      console.error('Error in toggleLike:', error);
+      throw error;
+    }
   };
 
   const updateBlog = async (updates: Partial<Blog>) => {
@@ -366,7 +400,7 @@ export function useBlog(id: string) {
   };
 
   useEffect(() => {
-    fetchBlog();
+    fetchBlog(true); // Increment views on initial load
     fetchComments();
   }, [id]);
 
@@ -381,6 +415,6 @@ export function useBlog(id: string) {
     deleteBlog,
     toggleLike,
     checkIfLiked,
-    refetch: fetchBlog,
+    refetch: () => fetchBlog(false), // Don't increment views on manual refresh
   };
 }
