@@ -16,15 +16,14 @@ A comprehensive hackathon platform that brings together organizers and participa
 - **Avatar Upload**: Custom avatar support with image handling
 
 ### 💬 Communication & File Sharing
-- **Hybrid Storage System**: Automatic detection between Supabase (production) and localStorage (development)
-- **Real-time Messaging**: Advanced messaging system with instant updates
-- **Unlimited File Storage**: Cloud-based file storage with Supabase Storage (production)
+- **Real-time Messaging**: Advanced messaging system with instant updates powered by Supabase
+- **Unlimited File Storage**: Cloud-based file storage with Supabase Storage
 - **Smart File Compression**: Automatic image compression and optimization
-- **Adaptive File Limits**: 50MB per file (Supabase) or 5MB (localStorage)
+- **Large File Support**: Upload files up to 50MB per file
 - **Multiple File Types**: Images, documents, videos, audio, ZIP files, and more
 - **Secure File Access**: Role-based file access with download protection
-- **File Management**: Track storage usage and cleanup old files
-- **Automatic Fallback**: Seamless switching between storage methods
+- **File Management**: Track storage usage and manage attachments
+- **CDN Delivery**: Fast file downloads from Supabase CDN
 - **Message Management**: Edit and delete your own messages
 - **Message Search**: Find conversations quickly with built-in search
 - **Unread Tracking**: Visual indicators for unread messages
@@ -73,17 +72,16 @@ A comprehensive hackathon platform that brings together organizers and participa
 - **shadcn/ui** - High-quality component library
 
 ### Backend & Storage
-- **Hybrid Storage System** - Automatic fallback between Supabase and localStorage
-- **Supabase** - Backend-as-a-Service with PostgreSQL (production)
-- **Supabase Storage** - Unlimited file storage with CDN (production)
-- **localStorage** - Local development and fallback storage
+- **Supabase** - Backend-as-a-Service with PostgreSQL
+- **Supabase Storage** - Unlimited file storage with CDN
+- **Supabase Auth** - Secure authentication and user management
 - **Real-time Subscriptions** - Live updates and notifications
 - **Row Level Security** - Secure data access policies
 
 ### State Management
 - **React Context** - Authentication and theme management
 - **Custom Hooks** - Reusable logic for data fetching
-- **Hybrid Storage Client** - Automatic storage detection and synchronization
+- **Supabase Client** - Real-time data synchronization
 
 ### UI Components
 - **Lucide React** - Beautiful icon library
@@ -193,30 +191,6 @@ npm run lint         # Run ESLint
 - **Code Splitting**: Automatic route-based splitting
 - **Image Optimization**: Responsive images with proper loading
 - **Bundle Analysis**: Optimized build output
-
-## 🔄 Hybrid Storage System
-
-The platform features an intelligent hybrid storage system that automatically detects the environment and uses the appropriate storage method:
-
-### Development Mode (localStorage)
-- **Automatic Detection**: Uses localStorage when Supabase tables are not available
-- **File Size Limit**: 5MB per file (browser localStorage limitations)
-- **File Storage**: Base64 encoding for images and documents
-- **Data Persistence**: Local browser storage
-- **No Setup Required**: Works immediately without configuration
-
-### Production Mode (Supabase)
-- **Automatic Detection**: Uses Supabase when tables and storage are available
-- **File Size Limit**: 50MB per file (cloud storage)
-- **File Storage**: Supabase Storage with CDN delivery
-- **Data Persistence**: PostgreSQL database with real-time sync
-- **Scalable**: Handles unlimited users and files
-
-### Seamless Transition
-- **Zero Configuration**: Automatically switches based on availability
-- **Consistent API**: Same interface regardless of storage method
-- **Graceful Fallback**: Falls back to localStorage if Supabase fails
-- **Migration Ready**: Data can be migrated when upgrading to production
 
 ## 🚀 Deployment
 
