@@ -20,8 +20,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/contexts/AuthContext';
-import { storage } from '@/lib/storage';
-import { hybridStorage } from '@/lib/hybridStorage';
+import { supabase } from '@/integrations/supabase/client';
+import { fileStorage } from '@/lib/fileStorage';
 import { LinkRenderer } from '@/lib/linkDetector';
 import { UserProfileModal } from '@/components/UserProfileModal';
 import { AvatarUpload } from '@/components/AvatarUpload';
@@ -56,13 +56,12 @@ function StorageUsageDisplay() {
   const [storageInfo, setStorageInfo] = useState<{
     totalFiles: number;
     totalSize: number;
-    sizeInMB: number;
   } | null>(null);
 
   useEffect(() => {
     const loadStorageInfo = async () => {
       try {
-        const info = await hybridStorage.getStorageUsage();
+        const info = await fileStorage.getUserStorageUsage();
         setStorageInfo(info);
       } catch (error) {
         console.error('Failed to load storage info:', error);
@@ -72,11 +71,12 @@ function StorageUsageDisplay() {
     loadStorageInfo();
   }, []);
 
-  if (!storageInfo || storageInfo.sizeInMB < 5) { // Show only if > 5MB
+  if (!storageInfo || storageInfo.totalSize < 10 * 1024 * 1024) { // Show only if > 10MB
     return null;
   }
 
-  const isWarning = storageInfo.sizeInMB > 50; // Warning at 50MB
+  const sizeInMB = storageInfo.totalSize / (1024 * 1024);
+  const isWarning = sizeInMB > 100; // Warning at 100MB
 
   return (
     <div className={`border rounded-lg p-3 mb-4 ${
@@ -92,7 +92,7 @@ function StorageUsageDisplay() {
               ? 'text-yellow-800 dark:text-yellow-200' 
               : 'text-blue-800 dark:text-blue-200'
           }`}>
-            Storage: {hybridStorage.formatFileSize(storageInfo.totalSize)} used ({storageInfo.totalFiles} files)
+            Storage: {fileStorage.formatFileSize(storageInfo.totalSize)} used ({storageInfo.totalFiles} files)
           </p>
         </div>
         <div className="flex gap-2">
@@ -101,13 +101,13 @@ function StorageUsageDisplay() {
             size="sm"
             onClick={async () => {
               try {
-                const cleaned = await hybridStorage.cleanupOldData();
-                toast.success(`Cleaned up ${cleaned} old items`);
+                const cleaned = await fileStorage.cleanupOldFiles();
+                toast.success(`Cleaned up ${cleaned} old files`);
                 // Refresh storage info
-                const info = await hybridStorage.getStorageUsage();
+                const info = await fileStorage.getUserStorageUsage();
                 setStorageInfo(info);
               } catch (error) {
-                toast.error('Failed to cleanup data');
+                toast.error('Failed to cleanup files');
               }
             }}
             className="text-xs"
@@ -191,21 +191,26 @@ export default function Messages() {
       );
       
       if (unreadMessages.length > 0) {
-        // Mark messages as read using hybrid storage
-        hybridStorage.markMessagesAsRead(selectedUser.id, user.id).then(() => {
-          // Update local state to reflect read status
-          setDirectMessages(prev => 
-            prev.map(msg => 
-              msg.sender_id === selectedUser.id && 
-              msg.receiver_id === user.id && 
-              !msg.is_read
-                ? { ...msg, is_read: true }
-                : msg
-            )
-          );
-        }).catch(error => {
-          console.error('Failed to mark messages as read:', error);
-        });
+        // Mark messages as read in Supabase
+        const messageIds = unreadMessages.map(msg => msg.id);
+        (supabase as any)
+          .from('direct_messages')
+          .update({ is_read: true })
+          .in('id', messageIds)
+          .then(({ error }: any) => {
+            if (error) {
+              console.error('Failed to mark messages as read:', error);
+            } else {
+              // Update local state to reflect read status
+              setDirectMessages(prev => 
+                prev.map(msg => 
+                  messageIds.includes(msg.id)
+                    ? { ...msg, is_read: true }
+                    : msg
+                )
+              );
+            }
+          });
       }
     }
   }, [selectedUser, user?.id]);
@@ -240,13 +245,49 @@ export default function Messages() {
         return;
       }
 
-      // Load all users using hybrid storage
-      const usersData = await hybridStorage.getAllUsers(user.id);
-      setAllUsers(usersData);
+      // Load all users from Supabase
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, name, email')
+        .neq('user_id', user.id);
+
+      if (profilesError) {
+        console.error('Error loading users:', profilesError);
+      } else {
+        setAllUsers(profilesData || []);
+      }
       
-      // Load direct messages using hybrid storage
-      const messagesData = await hybridStorage.getDirectMessages(user.id);
-      setDirectMessages(messagesData);
+      // Load direct messages from Supabase
+      const { data: messagesData, error: messagesError } = await (supabase as any)
+        .from('direct_messages')
+        .select(`
+          id,
+          sender_id,
+          receiver_id,
+          content,
+          message_type,
+          file_url,
+          file_name,
+          file_size,
+          file_type,
+          attachment_id,
+          is_read,
+          created_at,
+          sender:profiles!sender_id(name)
+        `)
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .order('created_at', { ascending: false });
+
+      if (messagesError) {
+        console.error('Error loading messages:', messagesError);
+        setError(messagesError.message);
+      } else {
+        const formattedMessages = (messagesData || []).map((msg: any) => ({
+          ...msg,
+          sender_name: msg.sender?.name || 'Unknown User'
+        }));
+        setDirectMessages(formattedMessages);
+      }
       
       setLoading(false);
     } catch (err) {
@@ -261,8 +302,33 @@ export default function Messages() {
     if (!user?.id) return;
 
     try {
-      const messagesData = await hybridStorage.getDirectMessages(user.id);
-      setDirectMessages(messagesData);
+      const { data: messagesData, error } = await (supabase as any)
+        .from('direct_messages')
+        .select(`
+          id,
+          sender_id,
+          receiver_id,
+          content,
+          message_type,
+          file_url,
+          file_name,
+          file_size,
+          file_type,
+          attachment_id,
+          is_read,
+          created_at,
+          sender:profiles!sender_id(name)
+        `)
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .order('created_at', { ascending: false });
+
+      if (!error && messagesData) {
+        const formattedMessages = messagesData.map((msg: any) => ({
+          ...msg,
+          sender_name: msg.sender?.name || 'Unknown User'
+        }));
+        setDirectMessages(formattedMessages);
+      }
     } catch (error) {
       console.error('Error refreshing messages:', error);
     }
@@ -275,9 +341,9 @@ export default function Messages() {
       const fileArray = Array.from(files);
       console.log('Files selected:', fileArray.map(f => ({ name: f.name, size: f.size, type: f.type })));
       
-      // Check for file size limits using hybrid storage validation
+      // Check for file size limits (50MB for Supabase)
       const validFiles = fileArray.filter(file => {
-        const validation = hybridStorage.validateFile(file);
+        const validation = fileStorage.validateFile(file, 50 * 1024 * 1024);
         if (!validation.valid) {
           toast.error(`${file.name}: ${validation.error}`);
           return false;
@@ -322,7 +388,24 @@ export default function Messages() {
   };
 
   const handleDownloadFile = async (fileUrl: string, fileName: string) => {
-    await hybridStorage.downloadFile(fileUrl, fileName);
+    try {
+      const response = await fetch(fileUrl);
+      if (!response.ok) throw new Error('Failed to fetch file');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('File downloaded!');
+    } catch (error) {
+      console.error('Download error:', error);
+      toast.error(`Failed to download file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleEditMessage = (message: DirectMessage) => {
@@ -337,12 +420,13 @@ export default function Messages() {
     }
 
     try {
-      // Update message in storage
-      const data = storage.getData();
-      if (data.directMessages && data.directMessages[messageId]) {
-        data.directMessages[messageId].content = editingMessageText.trim();
-        storage.saveData(data);
-      }
+      // Update message in Supabase
+      const { error } = await (supabase as any)
+        .from('direct_messages')
+        .update({ content: editingMessageText.trim() })
+        .eq('id', messageId);
+
+      if (error) throw error;
 
       // Update local state
       setDirectMessages((prev) =>
@@ -357,6 +441,7 @@ export default function Messages() {
       setEditingMessageText('');
       toast.success('Message updated!');
     } catch (error) {
+      console.error('Failed to update message:', error);
       toast.error('Failed to update message');
     }
   };
@@ -370,12 +455,13 @@ export default function Messages() {
     if (!messageToDelete) return;
 
     try {
-      // Delete from storage
-      const data = storage.getData();
-      if (data.directMessages) {
-        delete data.directMessages[messageToDelete.id];
-        storage.saveData(data);
-      }
+      // Delete from Supabase
+      const { error } = await (supabase as any)
+        .from('direct_messages')
+        .delete()
+        .eq('id', messageToDelete.id);
+
+      if (error) throw error;
 
       // Update local state
       setDirectMessages((prev) => prev.filter((msg) => msg.id !== messageToDelete.id));
@@ -384,6 +470,7 @@ export default function Messages() {
       setMessageToDelete(null);
       toast.success('Message deleted!');
     } catch (error) {
+      console.error('Failed to delete message:', error);
       toast.error('Failed to delete message');
     }
   };
@@ -407,68 +494,108 @@ export default function Messages() {
 
     setIsSubmitting(true);
     try {
-      const profile = storage.getProfile(user.id);
-
       // Send text message if there's content
       if (messageText) {
-        const success = await hybridStorage.sendTextMessage(
-          user.id,
-          selectedUser.id,
-          messageText
-        );
+        const { data: messageData, error: messageError } = await (supabase as any)
+          .from('direct_messages')
+          .insert({
+            sender_id: user.id,
+            receiver_id: selectedUser.id,
+            content: messageText,
+            message_type: 'text'
+          })
+          .select()
+          .single();
 
-        if (!success) {
-          throw new Error('Failed to send text message');
+        if (messageError) {
+          throw messageError;
         }
 
-        console.log('Text message sent successfully');
+        console.log('Text message sent successfully:', messageData);
 
         // Refresh messages to show the new message
         await refreshMessages();
 
         // Send notification for text message
+        const { data: senderProfile } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('user_id', user.id)
+          .single();
+        
         notificationService.addMessageNotification(
           selectedUser.id,
           user.id,
-          user.user_metadata?.name || user.email || 'Anonymous',
+          senderProfile?.name || user.email || 'Anonymous',
           messageText
         );
       }
 
-      // Send file messages using hybrid storage
+      // Send file messages using Supabase Storage
       for (const file of filesToSend) {
         try {
           console.log('Processing file:', file.name, 'Size:', file.size, 'Type:', file.type);
           
-          // Validate file using hybrid storage
-          const validation = hybridStorage.validateFile(file);
+          // Validate file
+          const validation = fileStorage.validateFile(file, 50 * 1024 * 1024);
           if (!validation.valid) {
             toast.error(`${file.name}: ${validation.error}`);
             continue;
           }
 
-          // Send file message using hybrid storage
-          const success = await hybridStorage.sendFileMessage(
-            user.id,
-            selectedUser.id,
+          // Upload file to Supabase Storage
+          const fileMetadata = await fileStorage.uploadFile({
             file,
-            `Sent a file: ${file.name}`
-          );
+            bucket: 'message-attachments',
+            folder: user.id,
+            compress: file.type.startsWith('image/'),
+            maxWidth: 1200,
+            maxHeight: 1200,
+            quality: 0.8
+          });
 
-          if (!success) {
-            throw new Error('Failed to send file message');
+          if (!fileMetadata) {
+            throw new Error('Failed to upload file');
           }
 
-          console.log('File message sent successfully:', file.name);
+          console.log('File uploaded successfully:', fileMetadata);
+
+          // Create message with file attachment
+          const { data: messageData, error: messageError } = await (supabase as any)
+            .rpc('create_message_with_attachment', {
+              p_sender_id: user.id,
+              p_receiver_id: selectedUser.id,
+              p_content: `Sent a file: ${file.name}`,
+              p_message_type: getMessageType(file.type),
+              p_file_name: fileMetadata.fileName,
+              p_file_type: fileMetadata.fileType,
+              p_file_size: fileMetadata.fileSize,
+              p_storage_path: fileMetadata.storagePath,
+              p_public_url: fileMetadata.publicUrl
+            });
+
+          if (messageError) {
+            // Clean up uploaded file if message creation fails
+            await fileStorage.deleteFile(fileMetadata.id);
+            throw messageError;
+          }
+
+          console.log('Message created successfully:', messageData);
           
           // Refresh messages to show the new message
           await refreshMessages();
 
           // Send notification for file
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('user_id', user.id)
+            .single();
+          
           notificationService.addMessageNotification(
             selectedUser.id,
             user.id,
-            user.user_metadata?.name || user.email || 'Anonymous',
+            senderProfile?.name || user.email || 'Anonymous',
             `Sent a file: ${file.name}`
           );
           
@@ -476,13 +603,7 @@ export default function Messages() {
         } catch (fileError) {
           console.error('Error processing file:', file.name, fileError);
           const errorMessage = fileError instanceof Error ? fileError.message : 'Unknown error';
-          
-          // Show helpful message for localStorage quota issues
-          if (errorMessage.includes('quota') || errorMessage.includes('too large for localStorage')) {
-            toast.error(`Development Mode Limitation: ${file.name} is too large for localStorage. In production (Lovable), files up to 50MB are supported with unlimited storage.`);
-          } else {
-            toast.error(`Failed to send file: ${file.name} - ${errorMessage}`);
-          }
+          toast.error(`Failed to send file: ${file.name} - ${errorMessage}`);
         }
       }
 
@@ -637,7 +758,7 @@ export default function Messages() {
                   >
                     <div className="flex items-center gap-3">
                       <AvatarUpload 
-                        currentAvatar={storage.getProfile(u.id)?.avatar_url || null}
+                        currentAvatar={null}
                         userName={u.name}
                         size="sm"
                         editable={false}
@@ -681,7 +802,7 @@ export default function Messages() {
               <div className="bg-card border border-border rounded-2xl p-6 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <AvatarUpload 
-                    currentAvatar={storage.getProfile(selectedUser.id)?.avatar_url || null}
+                    currentAvatar={null}
                     userName={selectedUser.name}
                     size="md"
                     editable={false}
@@ -723,7 +844,7 @@ export default function Messages() {
                           {!isOwn && (
                             <div className="flex-shrink-0 mt-auto">
                               <AvatarUpload 
-                                currentAvatar={storage.getProfile(message.sender_id)?.avatar_url || null}
+                                currentAvatar={null}
                                 userName={message.sender_name}
                                 size="sm"
                                 editable={false}
@@ -872,7 +993,7 @@ export default function Messages() {
                           {isOwn && (
                             <div className="flex-shrink-0 mt-auto">
                               <AvatarUpload 
-                                currentAvatar={storage.getProfile(message.sender_id)?.avatar_url || null}
+                                currentAvatar={null}
                                 userName={message.sender_name}
                                 size="sm"
                                 editable={false}
@@ -1147,7 +1268,7 @@ export default function Messages() {
                     }}
                   >
                     <AvatarUpload 
-                      currentAvatar={storage.getProfile(u.id)?.avatar_url || null}
+                      currentAvatar={null}
                       userName={u.name}
                       size="sm"
                       editable={false}
