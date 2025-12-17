@@ -83,14 +83,18 @@ export default function Auth() {
 
         const { error } = await signUp(formData.email, formData.password, formData.name, 'participant');
         if (error) {
-          if (error.message.includes('already registered')) {
+          console.error('Signup error:', error);
+          if (error.message.includes('already registered') || error.message.includes('already been registered')) {
             toast.error('This email is already registered. Please sign in.');
+          } else if (error.message.includes('Email not confirmed')) {
+            toast.info('Please check your email to confirm your account before signing in.');
           } else {
-            toast.error(error.message || 'Failed to sign up');
+            toast.error(error.message || 'Failed to sign up. Please try again.');
           }
         } else {
-          toast.success('Account created successfully!');
-          // The Navigate component above will handle the redirect based on role
+          toast.success('Account created successfully! You can now sign in.');
+          // Check browser console for any additional info
+          console.log('Signup successful! Check Supabase dashboard → Authentication → Users');
         }
       }
     } finally {

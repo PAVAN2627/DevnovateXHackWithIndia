@@ -113,10 +113,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, name: string, role: AppRole) => {
     try {
+      console.log('Starting signup for:', email);
+      
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
+          emailRedirectTo: window.location.origin,
           data: {
             name,
             role,
@@ -124,30 +127,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       });
 
+      console.log('Signup response:', { data, error });
+
       if (error) {
+        console.error('Signup error:', error);
         return { error };
       }
 
       if (data.user) {
+        console.log('User created:', data.user.id);
+        
         // Create profile and role in Supabase
-        await supabase.from('profiles').insert({
+        const { error: profileError } = await supabase.from('profiles').insert({
           user_id: data.user.id,
           email,
           name,
         });
 
-        await supabase.from('user_roles').insert({
+        if (profileError) {
+          console.error('Profile creation error:', profileError);
+        }
+
+        const { error: roleError } = await supabase.from('user_roles').insert({
           user_id: data.user.id,
           role,
         });
 
-        setUser(data.user);
-        setSession(data.session);
-        await fetchUserData(data.user.id);
+        if (roleError) {
+          console.error('Role creation error:', roleError);
+        }
+
+        // Check if email confirmation is required
+        if (data.session) {
+          // User is logged in immediately (email confirmation disabled)
+          setUser(data.user);
+          setSession(data.session);
+          await fetchUserData(data.user.id);
+        } else {
+          // Email confirmation required
+          console.log('Email confirmation required for:', email);
+        }
       }
 
       return { error: null };
     } catch (error) {
+      console.error('Signup exception:', error);
       return { error: error as Error };
     }
   };
