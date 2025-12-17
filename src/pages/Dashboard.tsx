@@ -265,7 +265,7 @@ export default function Dashboard() {
 
       {/* Stats - Only for organizers */}
       {isOrganizer && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 px-4 md:px-0">
           {stats.map((stat) => (
             <StatsCard key={stat.title} {...stat} />
           ))}
@@ -285,9 +285,9 @@ export default function Dashboard() {
           {isOrganizer ? 'Your Hackathons' : 'All Hackathons'}
         </h2>
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 px-4 md:px-0">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="glass rounded-xl h-80 animate-pulse" />
+              <div key={i} className="glass rounded-xl h-64 md:h-80 animate-pulse" />
             ))}
           </div>
         ) : displayHackathons.length === 0 ? (
@@ -300,7 +300,7 @@ export default function Dashboard() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 px-4 md:px-0">
             {displayHackathons.map((hackathon) => (
               <HackathonCard 
                 key={hackathon.id} 
