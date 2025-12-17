@@ -150,6 +150,7 @@ export default function IssueDetails() {
       // Send notification to issue author
       if (issue && issue.author_id !== user?.id) {
         notificationService.addIssueCommentNotification(
+          issue.author_id,
           id || '',
           issue.title,
           user?.email || 'Anonymous',

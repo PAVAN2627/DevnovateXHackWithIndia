@@ -107,6 +107,7 @@ export default function BlogDetails() {
       // Send notification to blog author
       if (blog && blog.author_id !== user.id) {
         notificationService.addBlogCommentNotification(
+          blog.author_id,
           id!,
           blog.title,
           user.email || 'Anonymous',
@@ -163,10 +164,12 @@ export default function BlogDetails() {
     if (!user || !blog) return;
 
     try {
+      const wasLiked = isLiked;
+      setIsLiked(!wasLiked); // Optimistic update
       await toggleLike();
-      setIsLiked(!isLiked);
-      toast.success(isLiked ? 'Like removed!' : 'Blog liked!');
+      toast.success(wasLiked ? 'Like removed!' : 'Blog liked!');
     } catch (error: any) {
+      setIsLiked(isLiked); // Revert on error
       toast.error(error.message || 'Failed to like blog');
     }
   };
