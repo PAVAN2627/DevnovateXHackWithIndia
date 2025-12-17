@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, X, Mail, MessageCircle, CheckCircle } from 'lucide-react';
+import { Bell, X, Mail, MessageCircle, CheckCircle, Megaphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,11 +16,13 @@ export function NotificationBell() {
     loadNotifications();
     const interval = setInterval(loadNotifications, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user?.id]);
 
   const loadNotifications = () => {
     if (user?.id) {
+      console.log('Loading notifications for user:', user.id);
       const userNotifications = notificationService.getNotifications(user.id);
+      console.log('Found notifications:', userNotifications);
       setNotifications(userNotifications);
       setUnreadCount(notificationService.getUnreadCount(user.id));
     }

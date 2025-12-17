@@ -98,7 +98,8 @@ export const notificationService = {
   // Helper methods for specific notification types
   addMessageNotification: (receiverId: string, senderId: string, senderName: string, messagePreview: string) => {
     const safeMessagePreview = (messagePreview || '').substring(0, 100);
-    return notificationService.addNotification({
+    console.log('Creating message notification for user:', receiverId);
+    const notification = notificationService.addNotification({
       type: 'message',
       title: `New message from ${senderName}`,
       message: safeMessagePreview,
@@ -106,11 +107,14 @@ export const notificationService = {
       read: false,
       action_url: `/messages?with=${senderId}`,
     });
+    console.log('Created notification:', notification);
+    return notification;
   },
 
   addBlogCommentNotification: (blogAuthorId: string, blogId: string, blogTitle: string, commenterName: string, commentPreview: string) => {
     const safeCommentPreview = (commentPreview || '').substring(0, 80);
-    return notificationService.addNotification({
+    console.log('Creating blog comment notification for user:', blogAuthorId);
+    const notification = notificationService.addNotification({
       type: 'blog_comment',
       title: `New comment on "${blogTitle}"`,
       message: `${commenterName}: ${safeCommentPreview}`,
@@ -119,11 +123,14 @@ export const notificationService = {
       read: false,
       action_url: `/blog/${blogId}`,
     });
+    console.log('Created notification:', notification);
+    return notification;
   },
 
   addIssueCommentNotification: (issueAuthorId: string, issueId: string, issueTitle: string, commenterName: string, commentPreview: string) => {
     const safeCommentPreview = (commentPreview || '').substring(0, 80);
-    return notificationService.addNotification({
+    console.log('Creating issue comment notification for user:', issueAuthorId);
+    const notification = notificationService.addNotification({
       type: 'issue_comment',
       title: `New comment on "${issueTitle}"`,
       message: `${commenterName}: ${safeCommentPreview}`,
@@ -132,6 +139,8 @@ export const notificationService = {
       read: false,
       action_url: `/issues/${issueId}`,
     });
+    console.log('Created notification:', notification);
+    return notification;
   },
 
   addAnnouncementNotification: (participantId: string, hackathonId: string, hackathonTitle: string, organizerName: string, announcementTitle: string) => {

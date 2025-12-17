@@ -175,7 +175,7 @@ export default function BlogDetails() {
       await toggleLike();
       toast.success(wasLiked ? 'Like removed!' : 'Blog liked!');
     } catch (error: any) {
-      setIsLiked(isLiked); // Revert on error
+      setIsLiked(wasLiked); // Revert to original state on error
       toast.error(error.message || 'Failed to like blog');
     }
   };
