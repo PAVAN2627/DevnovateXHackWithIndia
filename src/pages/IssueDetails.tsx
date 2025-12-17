@@ -142,22 +142,28 @@ export default function IssueDetails() {
 
       await addComment(newComment.trim(), attachmentNames);
 
+      // Send notification to issue author (only after successful comment addition)
+      if (issue && issue.author_id !== user?.id) {
+        try {
+          notificationService.addIssueCommentNotification(
+            issue.author_id,
+            id || '',
+            issue.title,
+            user?.email || 'Anonymous',
+            newComment.trim()
+          );
+        } catch (notifError) {
+          console.error('Failed to send notification:', notifError);
+          // Don't show error to user for notification failure
+        }
+      }
+
       setNewComment('');
       setUploadedFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = '';
       toast.success('Comment posted!');
-
-      // Send notification to issue author
-      if (issue && issue.author_id !== user?.id) {
-        notificationService.addIssueCommentNotification(
-          issue.author_id,
-          id || '',
-          issue.title,
-          user?.email || 'Anonymous',
-          newComment.trim()
-        );
-      }
     } catch (error) {
+      console.error('Comment error:', error);
       toast.error('Failed to post comment');
     } finally {
       setIsSubmitting(false);

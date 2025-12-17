@@ -101,19 +101,25 @@ export default function BlogDetails() {
     setIsSubmitting(true);
     try {
       await addComment(newComment.trim());
+      
+      // Send notification to blog author (only after successful comment addition)
+      if (blog && blog.author_id !== user.id) {
+        try {
+          notificationService.addBlogCommentNotification(
+            blog.author_id,
+            id!,
+            blog.title,
+            user.email || 'Anonymous',
+            newComment.trim()
+          );
+        } catch (notifError) {
+          console.error('Failed to send notification:', notifError);
+          // Don't show error to user for notification failure
+        }
+      }
+      
       setNewComment('');
       toast.success('Comment added!');
-
-      // Send notification to blog author
-      if (blog && blog.author_id !== user.id) {
-        notificationService.addBlogCommentNotification(
-          blog.author_id,
-          id!,
-          blog.title,
-          user.email || 'Anonymous',
-          newComment.trim()
-        );
-      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to add comment');
     } finally {

@@ -97,10 +97,11 @@ export const notificationService = {
 
   // Helper methods for specific notification types
   addMessageNotification: (receiverId: string, senderId: string, senderName: string, messagePreview: string) => {
+    const safeMessagePreview = (messagePreview || '').substring(0, 100);
     return notificationService.addNotification({
       type: 'message',
       title: `New message from ${senderName}`,
-      message: messagePreview.substring(0, 100),
+      message: safeMessagePreview,
       userId: receiverId, // This should be the receiver, not sender
       read: false,
       action_url: `/messages?with=${senderId}`,
@@ -108,10 +109,11 @@ export const notificationService = {
   },
 
   addBlogCommentNotification: (blogAuthorId: string, blogId: string, blogTitle: string, commenterName: string, commentPreview: string) => {
+    const safeCommentPreview = (commentPreview || '').substring(0, 80);
     return notificationService.addNotification({
       type: 'blog_comment',
       title: `New comment on "${blogTitle}"`,
-      message: `${commenterName}: ${commentPreview.substring(0, 80)}`,
+      message: `${commenterName}: ${safeCommentPreview}`,
       userId: blogAuthorId,
       itemId: blogId,
       read: false,
@@ -120,10 +122,11 @@ export const notificationService = {
   },
 
   addIssueCommentNotification: (issueAuthorId: string, issueId: string, issueTitle: string, commenterName: string, commentPreview: string) => {
+    const safeCommentPreview = (commentPreview || '').substring(0, 80);
     return notificationService.addNotification({
       type: 'issue_comment',
       title: `New comment on "${issueTitle}"`,
-      message: `${commenterName}: ${commentPreview.substring(0, 80)}`,
+      message: `${commenterName}: ${safeCommentPreview}`,
       userId: issueAuthorId,
       itemId: issueId,
       read: false,
