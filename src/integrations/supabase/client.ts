@@ -5,12 +5,87 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+// Clean up old localStorage data on initialization
+try {
+  const storageSize = JSON.stringify(localStorage).length;
+  const sizeMB = storageSize / (1024 * 1024);
+  
+  if (sizeMB > 5) {
+    console.log(`localStorage is ${sizeMB.toFixed(2)}MB, cleaning up old data...`);
+    
+    // Keep only Supabase auth data
+    const keysToKeep: string[] = [];
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('sb-') || key.includes('auth-token')) {
+        keysToKeep.push(key);
+      }
+    });
+    
+    // Clear everything
+    localStorage.clear();
+    
+    // Restore Supabase auth data
+    keysToKeep.forEach(key => {
+      const value = sessionStorage.getItem(key);
+      if (value) {
+        try {
+          localStorage.setItem(key, value);
+        } catch (e) {
+          console.error('Failed to restore key:', key);
+        }
+      }
+    });
+    
+    console.log('localStorage cleaned up successfully');
+  }
+} catch (error) {
+  console.error('Error cleaning localStorage:', error);
+}
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Custom storage adapter that handles quota errors
+const customStorage = {
+  getItem: (key: string) => {
+    try {
+      return localStorage.getItem(key);
+    } catch (error) {
+      console.error('localStorage getItem error:', error);
+      return null;
+    }
+  },
+  setItem: (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (error) {
+      console.error('localStorage setItem error:', error);
+      // Clear old data and try again
+      try {
+        const keysToKeep = ['sb-', 'auth'];
+        Object.keys(localStorage).forEach(k => {
+          if (!keysToKeep.some(keep => k.includes(keep))) {
+            localStorage.removeItem(k);
+          }
+        });
+        localStorage.setItem(key, value);
+      } catch (retryError) {
+        console.error('localStorage retry failed:', retryError);
+      }
+    }
+  },
+  removeItem: (key: string) => {
+    try {
+      localStorage.removeItem(key);
+    } catch (error) {
+      console.error('localStorage removeItem error:', error);
+    }
+  }
+};
+
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage: customStorage as any,
     persistSession: true,
     autoRefreshToken: true,
   }
