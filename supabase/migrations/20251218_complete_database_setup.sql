@@ -185,6 +185,29 @@ CREATE TABLE public.file_attachments (
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
+-- Create notifications table
+CREATE TABLE public.notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('message', 'blog_comment', 'issue_comment', 'announcement')),
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  item_id UUID, -- Reference to related item (blog_id, issue_id, etc.)
+  action_url TEXT,
+  read BOOLEAN NOT NULL DEFAULT false,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
+-- Create user_announcement_reads table for tracking read announcements
+CREATE TABLE public.user_announcement_reads (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  announcement_id UUID NOT NULL REFERENCES public.announcements(id) ON DELETE CASCADE,
+  read_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  UNIQUE(user_id, announcement_id)
+);
+
 -- Add foreign key for direct messages attachment
 ALTER TABLE public.direct_messages ADD CONSTRAINT fk_direct_messages_attachment 
   FOREIGN KEY (attachment_id) REFERENCES public.file_attachments(id) ON DELETE SET NULL;
@@ -204,6 +227,8 @@ ALTER TABLE public.issue_comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.blog_likes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.issue_upvotes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.file_attachments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_announcement_reads ENABLE ROW LEVEL SECURITY;
 
 -- Security definer function to check role
 CREATE OR REPLACE FUNCTION public.has_role(_user_id UUID, _role app_role)
@@ -359,6 +384,29 @@ CREATE POLICY "Users can delete their own files" ON public.file_attachments FOR 
   auth.uid() = uploader_id
 );
 
+-- Notifications policies
+CREATE POLICY "Users can view their own notifications" ON public.notifications FOR SELECT USING (
+  auth.uid() = user_id
+);
+CREATE POLICY "System can create notifications" ON public.notifications FOR INSERT WITH CHECK (true);
+CREATE POLICY "Users can update their own notifications" ON public.notifications FOR UPDATE USING (
+  auth.uid() = user_id
+);
+CREATE POLICY "Users can delete their own notifications" ON public.notifications FOR DELETE USING (
+  auth.uid() = user_id
+);
+
+-- User announcement reads policies
+CREATE POLICY "Users can view their own reads" ON public.user_announcement_reads FOR SELECT USING (
+  auth.uid() = user_id
+);
+CREATE POLICY "Users can mark announcements as read" ON public.user_announcement_reads FOR INSERT WITH CHECK (
+  auth.uid() = user_id
+);
+CREATE POLICY "Users can update their own reads" ON public.user_announcement_reads FOR UPDATE USING (
+  auth.uid() = user_id
+);
+
 -- Handle new user signup - create profile and assign role
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
@@ -438,6 +486,11 @@ CREATE INDEX idx_issue_upvotes_issue ON public.issue_upvotes(issue_id);
 CREATE INDEX idx_file_attachments_uploader ON public.file_attachments(uploader_id);
 CREATE INDEX idx_file_attachments_context ON public.file_attachments(upload_context, context_id);
 CREATE INDEX idx_file_attachments_created ON public.file_attachments(created_at);
+CREATE INDEX idx_notifications_user ON public.notifications(user_id);
+CREATE INDEX idx_notifications_created ON public.notifications(created_at DESC);
+CREATE INDEX idx_notifications_read ON public.notifications(user_id, read);
+CREATE INDEX idx_user_announcement_reads_user ON public.user_announcement_reads(user_id);
+CREATE INDEX idx_user_announcement_reads_announcement ON public.user_announcement_reads(announcement_id);
 
 -- Enable realtime for relevant tables
 ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_messages;
@@ -446,6 +499,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.direct_messages;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.blog_comments;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.issue_comments;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.file_attachments;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
 
 -- Create storage buckets
 INSERT INTO storage.buckets (id, name, public) VALUES 

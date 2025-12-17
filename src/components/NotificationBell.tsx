@@ -9,40 +9,91 @@ export function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
 
   useEffect(() => {
-    loadNotifications();
-    const interval = setInterval(loadNotifications, 3000);
-    return () => clearInterval(interval);
+    if (user?.id) {
+      loadNotifications();
+      
+      // Subscribe to real-time notifications
+      const subscription = notificationService.subscribeToNotifications(
+        user.id,
+        (newNotification) => {
+          setNotifications(prev => [newNotification, ...prev]);
+          setUnreadCount(prev => prev + 1);
+        }
+      );
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
   }, [user?.id]);
 
-  const loadNotifications = () => {
-    if (user?.id) {
-      const userNotifications = notificationService.getNotifications(user.id);
+  const loadNotifications = async () => {
+    if (!user?.id) return;
+    
+    setLoading(true);
+    try {
+      const [userNotifications, count] = await Promise.all([
+        notificationService.getNotifications(user.id),
+        notificationService.getUnreadCount(user.id)
+      ]);
+      
       setNotifications(userNotifications);
-      setUnreadCount(notificationService.getUnreadCount(user.id));
+      setUnreadCount(count);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleNotificationClick = (notification: Notification) => {
-    notificationService.markAsRead(notification.id);
-    if (notification.action_url) {
-      navigate(notification.action_url);
-      setIsOpen(false);
+  const handleNotificationClick = async (notification: Notification) => {
+    try {
+      if (!notification.read) {
+        await notificationService.markAsRead(notification.id);
+        setUnreadCount(prev => Math.max(0, prev - 1));
+        setNotifications(prev => 
+          prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
+        );
+      }
+      
+      if (notification.action_url) {
+        navigate(notification.action_url);
+        setIsOpen(false);
+      }
+    } catch (error) {
+      console.error('Error handling notification click:', error);
     }
-    loadNotifications();
   };
 
-  const handleDelete = (id: string) => {
-    notificationService.deleteNotification(id);
-    loadNotifications();
+  const handleDelete = async (id: string) => {
+    try {
+      await notificationService.deleteNotification(id);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      // Update unread count if the deleted notification was unread
+      const deletedNotification = notifications.find(n => n.id === id);
+      if (deletedNotification && !deletedNotification.read) {
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+    }
   };
 
-  const handleMarkAllRead = () => {
-    notificationService.markAllAsRead();
-    loadNotifications();
+  const handleMarkAllRead = async () => {
+    if (!user?.id) return;
+    
+    try {
+      await notificationService.markAllAsRead(user.id);
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch (error) {
+      console.error('Error marking all as read:', error);
+    }
   };
 
   const getNotificationIcon = (type: string) => {
@@ -100,7 +151,12 @@ export function NotificationBell() {
 
           {/* Notifications List */}
           <div className="overflow-y-auto flex-1">
-            {notifications.length === 0 ? (
+            {loading ? (
+              <div className="p-8 text-center text-muted-foreground">
+                <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2" />
+                <p className="text-sm">Loading notifications...</p>
+              </div>
+            ) : notifications.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
                 <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">No notifications yet</p>
@@ -160,10 +216,17 @@ export function NotificationBell() {
           {notifications.length > 0 && (
             <div className="p-3 border-t border-border text-center">
               <button
-                onClick={() => {
-                  notificationService.clearAll();
-                  loadNotifications();
-                  setIsOpen(false);
+                onClick={async () => {
+                  if (user?.id) {
+                    try {
+                      await notificationService.clearAll(user.id);
+                      setNotifications([]);
+                      setUnreadCount(0);
+                      setIsOpen(false);
+                    } catch (error) {
+                      console.error('Error clearing notifications:', error);
+                    }
+                  }
                 }}
                 className="text-xs text-muted-foreground hover:text-destructive"
               >
