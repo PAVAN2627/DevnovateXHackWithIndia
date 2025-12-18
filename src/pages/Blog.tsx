@@ -57,7 +57,7 @@ const generateExcerpt = (content: string): string => {
 
 export default function Blog() {
   const { user, loading: authLoading, isOrganizer } = useAuth();
-  const { blogs, loading, createBlog, updateBlog, deleteBlog, refetch } = useBlogs();
+  const { blogs, loading, createBlog, updateBlog, deleteBlog, refetch, syncBlogLikeCounts } = useBlogs();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'latest' | 'popular' | 'tags'>('latest');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -247,10 +247,19 @@ export default function Blog() {
           <h1 className="text-3xl font-bold">Blog</h1>
           <p className="text-muted-foreground mt-1">Read and share insights with the community</p>
         </div>
-        <Button variant="hero" onClick={() => setIsModalOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Write Post
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={syncBlogLikeCounts}
+            className="text-sm"
+          >
+            🔄 Sync Likes
+          </Button>
+          <Button variant="hero" onClick={() => setIsModalOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Write Post
+          </Button>
+        </div>
       </div>
 
       {/* Search and Tabs */}
@@ -370,26 +379,36 @@ export default function Blog() {
                             e.preventDefault();
                             e.stopPropagation();
                             try {
+                              console.log('Attempting to like blog:', { blogId: blog.id, userId: user.id, blogAuthor: blog.author_id });
+                              
                               // Simple like toggle for blog listing
-                              const { data: existingLike } = await (supabase as any)
+                              const { data: existingLike, error: checkError } = await (supabase as any)
                                 .from('blog_likes')
                                 .select('id')
                                 .eq('blog_id', blog.id)
                                 .eq('user_id', user.id)
                                 .single();
 
+                              console.log('Existing like check:', { existingLike, checkError });
+
                               if (existingLike) {
                                 // Unlike
-                                await (supabase as any)
+                                console.log('Attempting to unlike...');
+                                const { error: deleteError } = await (supabase as any)
                                   .from('blog_likes')
                                   .delete()
                                   .eq('blog_id', blog.id)
                                   .eq('user_id', user.id);
+                                console.log('Unlike result:', { deleteError });
+                                if (deleteError) throw deleteError;
                               } else {
                                 // Like
-                                await (supabase as any)
+                                console.log('Attempting to like...');
+                                const { error: insertError } = await (supabase as any)
                                   .from('blog_likes')
                                   .insert({ blog_id: blog.id, user_id: user.id });
+                                console.log('Like result:', { insertError });
+                                if (insertError) throw insertError;
                               }
 
                               // Update the blog likes count in database

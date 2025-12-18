@@ -187,9 +187,61 @@ export function useBlogs() {
     };
   }, [user]);
 
+  // Function to synchronize like counts from database
+  const syncBlogLikeCounts = async () => {
+    try {
+      console.log('Syncing all blog like counts...');
+      
+      // Get all blogs
+      const { data: allBlogs, error: blogsError } = await (supabase as any)
+        .from('blogs')
+        .select('id, likes');
+
+      if (blogsError) throw blogsError;
+
+      // Update each blog's like count based on actual blog_likes table
+      for (const blog of allBlogs || []) {
+        const { count: actualLikeCount } = await (supabase as any)
+          .from('blog_likes')
+          .select('*', { count: 'exact', head: true })
+          .eq('blog_id', blog.id);
+
+        console.log(`Blog ${blog.id}: DB shows ${blog.likes}, actual likes: ${actualLikeCount}`);
+
+        // Update if counts don't match
+        if (blog.likes !== (actualLikeCount || 0)) {
+          await (supabase as any)
+            .from('blogs')
+            .update({ likes: actualLikeCount || 0 })
+            .eq('id', blog.id);
+          
+          console.log(`Updated blog ${blog.id} likes from ${blog.likes} to ${actualLikeCount || 0}`);
+        }
+      }
+
+      // Refresh the blog list
+      await fetchBlogs();
+      console.log('Blog like counts synchronized');
+    } catch (error) {
+      console.error('Error syncing blog like counts:', error);
+    }
+  };
+
   // Function to force refresh a specific blog in the list
   const refreshBlogInList = async (blogId: string) => {
     try {
+      // First sync the like count for this specific blog
+      const { count: actualLikeCount } = await (supabase as any)
+        .from('blog_likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('blog_id', blogId);
+
+      // Update the blog's like count in database
+      await (supabase as any)
+        .from('blogs')
+        .update({ likes: actualLikeCount || 0 })
+        .eq('id', blogId);
+
       const { data, error } = await (supabase as any)
         .from('blogs')
         .select('*')
@@ -217,6 +269,7 @@ export function useBlogs() {
           author_name: profile?.name || 'Unknown',
           author_avatar: profile?.avatar_url || null,
           comment_count: count || 0,
+          likes: actualLikeCount || 0, // Use the actual count
         };
 
         // Update this specific blog in the list
@@ -241,6 +294,7 @@ export function useBlogs() {
     deleteBlog,
     refetch: fetchBlogs,
     refreshBlogInList,
+    syncBlogLikeCounts,
   };
 }
 
