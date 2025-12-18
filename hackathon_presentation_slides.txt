@@ -1,0 +1,142 @@
+VIBE HACK 2.0 - PRESENTATION SLIDES
+====================================
+
+SLIDE 1: TITLE SLIDE
+====================
+🚀 DevNovate Platform
+Comprehensive Hackathon Management Platform
+
+Team: [Your Team Name]
+Hackathon: Vibe Hack 2.0
+Presented by: HackWithIndia & Lovable
+Date: December 2024
+
+SLIDE 2: PROBLEM STATEMENT
+==========================
+🎯 The Challenge
+• Fragmented hackathon management tools
+• Poor communication between participants
+• Lack of integrated collaboration features
+• No centralized community platform
+• Difficulty in project sharing & feedback
+• Missing real-time notifications & updates
+
+SLIDE 3: OUR SOLUTION
+=====================
+💡 DevNovate Platform
+A unified ecosystem combining:
+✅ Hackathon Management
+✅ Social Networking & Blogging
+✅ Issue Tracking & Collaboration
+✅ Real-time Messaging
+✅ File Sharing & Media Support
+✅ Live Notifications & Updates
+
+SLIDE 4: KEY FEATURES
+=====================
+🌟 Core Functionality
+• 🏆 Complete Hackathon Lifecycle Management
+• 👥 User Profiles & Social Networking
+• 📝 Integrated Blogging Platform
+• 🐛 Issue Tracking & Resolution
+• 💬 Real-time Direct Messaging
+• 🔔 Smart Notification System
+• 📁 File & Media Sharing
+• 📊 Analytics Dashboard
+
+SLIDE 5: TECHNICAL ARCHITECTURE
+===============================
+⚡ Tech Stack
+Frontend: React + TypeScript + Vite
+UI/UX: Tailwind CSS + Shadcn/ui
+Backend: Supabase (PostgreSQL + Auth + Storage)
+Real-time: Supabase Realtime
+Deployment: Vercel
+File Storage: Supabase Storage Buckets
+
+SLIDE 6: USER ROLES & PERMISSIONS
+=================================
+👤 Role-Based Access
+ORGANIZERS:
+• Create & manage hackathons
+• Post announcements
+• Moderate content
+• View analytics
+
+PARTICIPANTS:
+• Register for hackathons
+• Create blogs & issues
+• Direct messaging
+• File sharing
+
+SLIDE 7: UNIQUE FEATURES
+========================
+🎨 What Makes Us Different
+• 🔄 Real-time collaboration tools
+• 📱 Mobile-responsive design
+• 🌙 Dark/Light theme support
+• 🔐 Row-level security (RLS)
+• 📊 Comprehensive analytics
+• 🎯 Integrated workflow
+• ⚡ Lightning-fast performance
+
+SLIDE 8: IMPLEMENTATION HIGHLIGHTS
+==================================
+🛠️ Technical Achievements
+• Complete authentication system
+• Real-time messaging with file attachments
+• Advanced notification system
+• Responsive UI with modern design
+• Secure file storage & sharing
+• Database optimization with RLS
+• Type-safe development with TypeScript
+
+SLIDE 9: DEMO & RESULTS
+=======================
+📈 Platform Capabilities
+✅ User registration & profile management
+✅ Hackathon creation & participation
+✅ Blog writing with rich text editor
+✅ Issue tracking & commenting
+✅ Real-time messaging system
+✅ File uploads & media sharing
+✅ Live notifications & updates
+✅ Mobile-responsive interface
+
+SLIDE 10: FUTURE SCOPE & CONCLUSION
+===================================
+🚀 Next Steps & Impact
+FUTURE ENHANCEMENTS:
+• AI-powered team matching
+• Video conferencing integration
+• Advanced analytics & insights
+• Mobile app development
+• Integration with GitHub/GitLab
+
+IMPACT:
+• Streamlined hackathon experience
+• Enhanced developer collaboration
+• Reduced tool fragmentation
+• Improved community engagement
+
+Thank You! 🙏
+Questions & Demo Time
+
+=====================================================
+SUBMISSION DETAILS:
+=====================================================
+
+Problem Statement Title:
+DevNovate - Comprehensiva - Comprehensive Hackathon Management Platform
+
+Problem Statement Description:
+Traditional hackathon management lacks integrated communication, collaboration, and community features. Participants struggle with fragmented tools for registration, team formation, project sharing, issue tracking, and real-time communication. Our platform addresses these challenges by providing a unified ecosystem that combines hackathon management with social networking, blogging, issue tracking, and seamless communication - creating a complete developer community hub.
+
+Project Link:
+Repository: https://github.com/PAVAN2627/DevnovateXHackWithIndia.git
+Live Demo: [Your deployed URL]
+
+Tech Stack: React, TypeScript, Supabase, Tailwind CSS
+Key Features: Real-time messaging, blog platform, issue tracking, file sharing
+Security: Row-level security, authentication, role-based access
+Performance: Optimized queries, real-time updates, responsive design

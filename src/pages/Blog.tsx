@@ -8,6 +8,7 @@ import { useBlogs } from '@/hooks/useBlogs';
 import { AvatarUpload } from '@/components/AvatarUpload';
 import { RelativeTime } from '@/components/RelativeTime';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog,
   DialogContent,
@@ -56,7 +57,7 @@ const generateExcerpt = (content: string): string => {
 
 export default function Blog() {
   const { user, loading: authLoading, isOrganizer } = useAuth();
-  const { blogs, loading, createBlog, updateBlog, deleteBlog } = useBlogs();
+  const { blogs, loading, createBlog, updateBlog, deleteBlog, refetch } = useBlogs();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'latest' | 'popular' | 'tags'>('latest');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -364,10 +365,63 @@ export default function Blog() {
                         <RelativeTime timestamp={blog.created_at} format="short" />
                       </div>
                       <div className="flex items-center gap-4 text-muted-foreground">
-                        <div className="flex items-center gap-1">
+                        <button
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            try {
+                              // Simple like toggle for blog listing
+                              const { data: existingLike } = await (supabase as any)
+                                .from('blog_likes')
+                                .select('id')
+                                .eq('blog_id', blog.id)
+                                .eq('user_id', user.id)
+                                .single();
+
+                              if (existingLike) {
+                                // Unlike
+                                await (supabase as any)
+                                  .from('blog_likes')
+                                  .delete()
+                                  .eq('blog_id', blog.id)
+                                  .eq('user_id', user.id);
+                              } else {
+                                // Like
+                                await (supabase as any)
+                                  .from('blog_likes')
+                                  .insert({ blog_id: blog.id, user_id: user.id });
+                              }
+
+                              // Update the blog likes count in database
+                              const { count, error: countError } = await (supabase as any)
+                                .from('blog_likes')
+                                .select('*', { count: 'exact', head: true })
+                                .eq('blog_id', blog.id);
+
+                              console.log('Like count from DB:', { count, countError, blogId: blog.id });
+
+                              const { error: updateError } = await (supabase as any)
+                                .from('blogs')
+                                .update({ likes: count || 0 })
+                                .eq('id', blog.id);
+
+                              console.log('Blog update result:', { updateError, newLikes: count || 0 });
+
+                              // Force page refresh to show updated count
+                              console.log('Refreshing page to show updated count...');
+                              window.location.reload();
+                              
+                              toast.success(existingLike ? 'Like removed!' : 'Blog liked!');
+                            } catch (error) {
+                              console.error('Error toggling like:', error);
+                              toast.error('Failed to update like');
+                            }
+                          }}
+                          className="flex items-center gap-1 hover:text-primary transition-colors"
+                        >
                           <Heart className="h-4 w-4" />
                           <span className="text-sm">{blog.likes || 0}</span>
-                        </div>
+                        </button>
                         <div className="flex items-center gap-1">
                           <MessageCircle className="h-4 w-4" />
                           <span className="text-sm">{blog.comment_count || 0}</span>

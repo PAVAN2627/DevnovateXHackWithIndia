@@ -131,6 +131,36 @@ export function useBlogs() {
 
   useEffect(() => {
     fetchBlogs();
+
+    // Subscribe to real-time blog updates
+    const subscription = supabase
+      .channel('blogs_updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'blogs',
+        },
+        async (payload) => {
+          console.log('Real-time blog updated:', payload);
+          const updatedBlog = payload.new as any;
+          
+          // Update the specific blog in the list instead of refetching all
+          setBlogs(prevBlogs => 
+            prevBlogs.map(blog => 
+              blog.id === updatedBlog.id 
+                ? { ...blog, likes: updatedBlog.likes, views: updatedBlog.views }
+                : blog
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [user]);
 
   return {
@@ -213,15 +243,34 @@ export function useBlog(id: string) {
       // Fetch user names and avatars
       const commentsWithDetails = await Promise.all(
         (data || []).map(async (comment) => {
-          const { data: profile } = await supabase
+          console.log('Fetching profile for comment author:', comment.author_id);
+          
+          // First try to get from profiles table
+          const { data: profile, error: profileError } = await supabase
             .from('profiles')
-            .select('name, avatar_url')
+            .select('name, avatar_url, email')
             .eq('user_id', comment.author_id)
             .single();
 
+          console.log('Profile result:', { profile, profileError, authorId: comment.author_id });
+
+          let authorName = profile?.name;
+          
+          // If no name in profile, try to use email prefix
+          if (!authorName && profile?.email) {
+            authorName = profile.email.split('@')[0];
+          }
+          
+          // Final fallback
+          if (!authorName) {
+            authorName = 'Anonymous User';
+          }
+          
+          console.log('Final author name:', authorName);
+          
           return {
             ...comment,
-            author_name: profile?.name || 'Unknown',
+            author_name: authorName,
             author_avatar: profile?.avatar_url || null,
           };
         })
@@ -353,8 +402,12 @@ export function useBlog(id: string) {
       console.log('Update blog likes with actual count:', { updateError, actualCount: actualLikeCount });
       if (updateError) throw updateError;
 
-      console.log('Fetching updated blog...');
-      await fetchBlog(false); // Don't increment views when refreshing after like
+      // Directly update the blog state with the correct count instead of refetching
+      setBlog(prevBlog => 
+        prevBlog ? { ...prevBlog, likes: actualLikeCount || 0 } : prevBlog
+      );
+
+      console.log('Blog state updated with new like count:', actualLikeCount);
     } catch (error) {
       console.error('Error in toggleLike:', error);
       throw error;
@@ -402,6 +455,47 @@ export function useBlog(id: string) {
   useEffect(() => {
     fetchBlog(true); // Increment views on initial load
     fetchComments();
+
+    // Subscribe to real-time updates for this specific blog
+    const subscription = supabase
+      .channel(`blog_${id}_updates`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'blogs',
+          filter: `id=eq.${id}`,
+        },
+        (payload) => {
+          console.log('Individual blog updated:', payload);
+          const updatedBlog = payload.new as any;
+          
+          // Update the blog state with new like count
+          setBlog(prevBlog => 
+            prevBlog ? { ...prevBlog, likes: updatedBlog.likes, views: updatedBlog.views } : prevBlog
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'blog_comments',
+          filter: `blog_id=eq.${id}`,
+        },
+        (payload) => {
+          console.log('New comment added:', payload);
+          // Refresh comments when a new comment is added
+          fetchComments();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [id]);
 
   return {
