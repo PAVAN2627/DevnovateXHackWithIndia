@@ -143,25 +143,95 @@ export function useBlogs() {
           table: 'blogs',
         },
         async (payload) => {
-          console.log('Real-time blog updated:', payload);
+          console.log('Real-time blog updated in list:', payload);
           const updatedBlog = payload.new as any;
           
-          // Update the specific blog in the list instead of refetching all
+          // Update the specific blog in the list with new data
           setBlogs(prevBlogs => 
             prevBlogs.map(blog => 
               blog.id === updatedBlog.id 
-                ? { ...blog, likes: updatedBlog.likes, views: updatedBlog.views }
+                ? { 
+                    ...blog, 
+                    likes: updatedBlog.likes, 
+                    views: updatedBlog.views,
+                    updated_at: updatedBlog.updated_at 
+                  }
                 : blog
             )
           );
+          
+          console.log('Blog list updated with new like count:', updatedBlog.likes);
         }
       )
       .subscribe();
 
+    // Listen for custom blog like update events
+    const handleBlogLikeUpdate = (event: any) => {
+      const { blogId, newLikeCount } = event.detail;
+      console.log('Custom event: Blog like updated', { blogId, newLikeCount });
+      
+      setBlogs(prevBlogs => 
+        prevBlogs.map(blog => 
+          blog.id === blogId 
+            ? { ...blog, likes: newLikeCount }
+            : blog
+        )
+      );
+    };
+
+    window.addEventListener('blogLikeUpdated', handleBlogLikeUpdate);
+
     return () => {
       subscription.unsubscribe();
+      window.removeEventListener('blogLikeUpdated', handleBlogLikeUpdate);
     };
   }, [user]);
+
+  // Function to force refresh a specific blog in the list
+  const refreshBlogInList = async (blogId: string) => {
+    try {
+      const { data, error } = await (supabase as any)
+        .from('blogs')
+        .select('*')
+        .eq('id', blogId)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        // Get author info
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name, avatar_url')
+          .eq('user_id', data.author_id)
+          .single();
+
+        // Get comment count
+        const { count } = await supabase
+          .from('blog_comments')
+          .select('*', { count: 'exact', head: true })
+          .eq('blog_id', data.id);
+
+        const updatedBlog = {
+          ...data,
+          author_name: profile?.name || 'Unknown',
+          author_avatar: profile?.avatar_url || null,
+          comment_count: count || 0,
+        };
+
+        // Update this specific blog in the list
+        setBlogs(prevBlogs => 
+          prevBlogs.map(blog => 
+            blog.id === blogId ? updatedBlog : blog
+          )
+        );
+
+        console.log('Manually refreshed blog in list:', updatedBlog);
+      }
+    } catch (error) {
+      console.error('Error refreshing blog in list:', error);
+    }
+  };
 
   return {
     blogs,
@@ -170,6 +240,7 @@ export function useBlogs() {
     updateBlog,
     deleteBlog,
     refetch: fetchBlogs,
+    refreshBlogInList,
   };
 }
 
@@ -285,6 +356,7 @@ export function useBlog(id: string) {
   const addComment = async (content: string) => {
     if (!user) throw new Error('Must be logged in');
 
+    // Add the comment
     const { data, error } = await supabase
       .from('blog_comments')
       .insert({
@@ -296,6 +368,37 @@ export function useBlog(id: string) {
       .single();
 
     if (error) throw error;
+
+    // Automatically add a like when commenting (if not already liked)
+    const { data: existingLike } = await (supabase as any)
+      .from('blog_likes')
+      .select('id')
+      .eq('blog_id', id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!existingLike) {
+      await (supabase as any)
+        .from('blog_likes')
+        .insert({ blog_id: id, user_id: user.id });
+    }
+
+    // Update like count to match comment count + manual likes
+    const { count: commentCount } = await supabase
+      .from('blog_comments')
+      .select('*', { count: 'exact', head: true })
+      .eq('blog_id', id);
+
+    const { count: likeCount } = await (supabase as any)
+      .from('blog_likes')
+      .select('*', { count: 'exact', head: true })
+      .eq('blog_id', id);
+
+    // Update blog with the total like count
+    await (supabase as any)
+      .from('blogs')
+      .update({ likes: likeCount || 0 })
+      .eq('id', id);
 
     // Send notification to blog author (if not commenting on own blog)
     if (blog && blog.author_id !== user.id) {
@@ -315,6 +418,12 @@ export function useBlog(id: string) {
     }
 
     await fetchComments();
+    
+    // Update blog state with new like count
+    setBlog(prevBlog => 
+      prevBlog ? { ...prevBlog, likes: likeCount || 0 } : prevBlog
+    );
+
     return data;
   };
 
@@ -352,7 +461,7 @@ export function useBlog(id: string) {
 
     try {
       // Check if already liked
-      const { data: existingLike, error: checkError } = await supabase
+      const { data: existingLike, error: checkError } = await (supabase as any)
         .from('blog_likes')
         .select('id')
         .eq('blog_id', id)
@@ -364,7 +473,7 @@ export function useBlog(id: string) {
       if (existingLike) {
         // Unlike
         console.log('Unliking blog...');
-        const { error: deleteError } = await supabase
+        const { error: deleteError } = await (supabase as any)
           .from('blog_likes')
           .delete()
           .eq('blog_id', id)
@@ -375,7 +484,7 @@ export function useBlog(id: string) {
       } else {
         // Like
         console.log('Liking blog...');
-        const { error: insertError } = await supabase
+        const { error: insertError } = await (supabase as any)
           .from('blog_likes')
           .insert({ blog_id: id, user_id: user.id });
 
@@ -384,7 +493,7 @@ export function useBlog(id: string) {
       }
 
       // Get the actual count from database instead of using cached value
-      const { count: actualLikeCount, error: countError } = await supabase
+      const { count: actualLikeCount, error: countError } = await (supabase as any)
         .from('blog_likes')
         .select('*', { count: 'exact', head: true })
         .eq('blog_id', id);
@@ -394,7 +503,7 @@ export function useBlog(id: string) {
       if (countError) throw countError;
 
       // Update the blog with the actual count
-      const { error: updateError } = await supabase
+      const { error: updateError } = await (supabase as any)
         .from('blogs')
         .update({ likes: actualLikeCount || 0 })
         .eq('id', id);
@@ -402,12 +511,17 @@ export function useBlog(id: string) {
       console.log('Update blog likes with actual count:', { updateError, actualCount: actualLikeCount });
       if (updateError) throw updateError;
 
-      // Directly update the blog state with the correct count instead of refetching
+      // Directly update the blog state with the correct count
       setBlog(prevBlog => 
         prevBlog ? { ...prevBlog, likes: actualLikeCount || 0 } : prevBlog
       );
 
       console.log('Blog state updated with new like count:', actualLikeCount);
+      
+      // Trigger a custom event to notify blog list to refresh
+      window.dispatchEvent(new CustomEvent('blogLikeUpdated', { 
+        detail: { blogId: id, newLikeCount: actualLikeCount } 
+      }));
     } catch (error) {
       console.error('Error in toggleLike:', error);
       throw error;
