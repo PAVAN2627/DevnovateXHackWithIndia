@@ -138,6 +138,7 @@ export default function Dashboard() {
   );
 
   const handleStatsClick = async (type: 'hackathons' | 'users' | 'blogs' | 'issues') => {
+    console.log('handleStatsClick called with type:', type);
     let data: any[] = [];
     
     try {
@@ -168,42 +169,71 @@ export default function Dashboard() {
           }));
           break;
         case 'blogs':
-          const { data: blogsData } = await supabase
+          const { data: blogsData, error: blogsError } = await supabase
             .from('blogs')
-            .select(`
-              id, title, likes, created_at, author_id,
-              profiles!blogs_author_id_fkey(name)
-            `)
+            .select('id, title, likes, created_at, author_id')
             .order('created_at', { ascending: false });
           
-          data = (blogsData || []).map((b: any) => ({
-            id: b.id,
-            title: b.title,
-            author: b.profiles?.name || 'Anonymous',
-            likes: b.likes || 0,
-            created_at: b.created_at
-          }));
+          console.log('Blogs data fetch:', { blogsData, blogsError });
+          
+          if (blogsError) throw blogsError;
+          
+          // Get author names separately
+          const blogsWithAuthors = await Promise.all(
+            (blogsData || []).map(async (blog: any) => {
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('name')
+                .eq('user_id', blog.author_id)
+                .single();
+              
+              return {
+                id: blog.id,
+                title: blog.title,
+                author: profile?.name || 'Anonymous',
+                likes: blog.likes || 0,
+                created_at: blog.created_at
+              };
+            })
+          );
+          
+          data = blogsWithAuthors;
           break;
         case 'issues':
-          const { data: issuesData } = await supabase
+          const { data: issuesData, error: issuesError } = await supabase
             .from('issues')
-            .select(`
-              id, title, status, priority, created_at, author_id,
-              profiles!issues_author_id_fkey(name)
-            `)
+            .select('id, title, status, priority, created_at, author_id')
             .order('created_at', { ascending: false });
           
-          data = (issuesData || []).map((i: any) => ({
-            id: i.id,
-            title: i.title,
-            author: i.profiles?.name || 'Anonymous',
-            status: i.status,
-            priority: i.priority,
-            created_at: i.created_at
-          }));
+          console.log('Issues data fetch:', { issuesData, issuesError });
+          
+          if (issuesError) throw issuesError;
+          
+          // Get author names separately
+          const issuesWithAuthors = await Promise.all(
+            (issuesData || []).map(async (issue: any) => {
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('name')
+                .eq('user_id', issue.author_id)
+                .single();
+              
+              return {
+                id: issue.id,
+                title: issue.title,
+                author: profile?.name || 'Anonymous',
+                status: issue.status,
+                priority: issue.priority,
+                created_at: issue.created_at
+              };
+            })
+          );
+          
+          data = issuesWithAuthors;
           break;
       }
       
+      console.log('Final data for modal:', { type, dataLength: data.length, data: data.slice(0, 2) });
       setDetailsModalType(type);
       setDetailsModalData(data);
       setDetailsModalOpen(true);
@@ -268,6 +298,14 @@ export default function Dashboard() {
       onClick: () => handleStatsClick('issues')
     },
   ] : [];
+
+  console.log('Dashboard render:', { 
+    isOrganizer, 
+    statsLoading, 
+    stats, 
+    displayHackathons: displayHackathons.length,
+    dashboardStats: dashboardStats.map(s => ({ title: s.title, value: s.value }))
+  });
 
   return (
     <div className="space-y-8">
@@ -405,6 +443,7 @@ export default function Dashboard() {
                         key={item.id} 
                         className="glass rounded-lg p-4 cursor-pointer hover:shadow-glow transition-all"
                         onClick={() => {
+                          console.log('Navigating to:', detailsModalType, item.id);
                           if (detailsModalType === 'hackathons') {
                             navigate(`/hackathons/${item.id}`);
                           } else if (detailsModalType === 'users') {

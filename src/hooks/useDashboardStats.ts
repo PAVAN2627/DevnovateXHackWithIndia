@@ -55,13 +55,16 @@ export function useDashboardStats() {
           .from('hackathons')
           .select('*', { count: 'exact', head: true });
 
-        setStats({
+        const newStats = {
           totalUsers: usersCount || 0,
           totalBlogs: blogsCount || 0,
           totalIssues: issuesCount || 0,
           resolvedIssues: resolvedCount || 0,
           totalHackathons: hackathonsCount || 0,
-        });
+        };
+
+        console.log('Dashboard stats fetched:', newStats);
+        setStats(newStats);
       } catch (error) {
         console.error('Error fetching dashboard stats:', error);
       } finally {
