@@ -163,6 +163,35 @@ export function useBlogs() {
           console.log('Blog list updated with new like count:', updatedBlog.likes);
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'blog_likes',
+        },
+        async (payload) => {
+          console.log('Blog like changed:', payload);
+          // When a like is added/removed, refresh the affected blog
+          const blogId = payload.new?.blog_id || payload.old?.blog_id;
+          if (blogId) {
+            // Get updated like count and refresh that specific blog
+            const { count } = await (supabase as any)
+              .from('blog_likes')
+              .select('*', { count: 'exact', head: true })
+              .eq('blog_id', blogId);
+
+            // Update the blog in our local state
+            setBlogs(prevBlogs => 
+              prevBlogs.map(blog => 
+                blog.id === blogId 
+                  ? { ...blog, likes: count || 0 }
+                  : blog
+              )
+            );
+          }
+        }
+      )
       .subscribe();
 
     // Listen for custom blog like update events

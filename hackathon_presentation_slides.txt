@@ -3,7 +3,7 @@ VIBE HACK 2.0 - PRESENTATION SLIDES
 
 SLIDE 1: TITLE SLIDE
 ====================
-🚀 DevNovate Platform
+🚀 DevNovate X HackWithIndia Platform
 Comprehensive Hackathon Management Platform
 
 Team: [Your Team Name]

@@ -426,9 +426,8 @@ export default function Blog() {
 
                               console.log('Blog update result:', { updateError, newLikes: count || 0 });
 
-                              // Force page refresh to show updated count
-                              console.log('Refreshing page to show updated count...');
-                              window.location.reload();
+                              // Refresh the blog list to show updated count
+                              await refetch();
                               
                               toast.success(existingLike ? 'Like removed!' : 'Blog liked!');
                             } catch (error) {
